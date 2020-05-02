@@ -21,6 +21,8 @@ def main():
 
     dirname = args[0]
     instance = data.Data(dirname)
+    print(instance.events)
+
 
 
 if __name__ == "__main__":
