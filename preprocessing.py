@@ -110,7 +110,6 @@ class preprocess:
     #Returns dict with week number as key and a list of event conflicts in terms of indexes for that week as value
     def get_event_conflict(self):
         course_conflict = self.__get_course_conflict()
-        print(course_conflict)
         event_conflict = {"week "+ str(i):[] for i in range(self.weeks_begin,self.weeks_end+1)}
         for week in range(self.weeks_begin,self.weeks_end+1):
             current_week = "week "+str(week)
