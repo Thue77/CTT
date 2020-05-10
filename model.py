@@ -14,29 +14,20 @@ class Model(pre.preprocess):
     ## Weekly model. Timeslots and events for one week
     def CTT_week(self,events:dict,timeslots:dict):
         m = pe.ConcreteModel()
+        #Only include timeslots that are not banned
         T = [item for key,sublist in timeslots.items() for item in sublist if self.timeslots.get(item) not in self.banned]
         # print(self.banned)
         E = [key for key in events]
         R = [key for key in self.rooms]
         Index = [(e,t,r) for e in E for t in T for r in R]
-        for e,t,r in Index:
-            duration = self.events.get(e).get("duration")
-            for t_banned in self.banned_keys:
-                if self.timeslots.get(t).get("day") == self.timeslots.get(t_banned).get("day") and t_banned-t >= duration:
-                    Index.remove((e,t,r))
-                    break
+        #Remove unnecessary indexes
+        Index = self.remove_var_close_to_banned(Index)
         m.x = pe.Var(Index, domain = pe.Binary)
         m.obj=pe.Objective(expr=1)
         #All events must happen
         m.events_must_happen = pe.ConstraintList()
         for e in E:
-            m.events_must_happen.add(sum(m.x[e,t,r] for _,t,r in Index)==1)
-        #Cannot start too close to a banned timeslot
-        # m.no_banned_timeslots = pe.ConstraintList()
-        # for e in E:
-        #     duration = self.events.get(e).get("duration")
-        #     for t in self.banned_keys:
-        #         m.no_banned_timeslots.add(sum(m.x[e,l,r] for r in R for l in range(t-duration+1,t) if (e,l,r) in Index)==0)
+            m.events_must_happen.add(sum(m.x[e,t,r] for _,t,r in list(filter(lambda x: e == x[0],Index)))==1)
 
         #
         # # each event must happen exactly 1
@@ -49,8 +40,8 @@ class Model(pre.preprocess):
         #         for u,v in consec_events:
         #             m.c.add(sum(m.x[u,t]-m.x[v,t] for t in  range(1,t_tilde+1) if t not in timeslots.get("banned"))>=0)
         solver = pyomo.opt.SolverFactory('glpk')
-        results = solver.solve(m,tee=False)
-        m.pprint()
+        results = solver.solve(m,tee=True)
+        # m.pprint()
         return [(e,t,r) for e,t,r in Index if pe.value(m.x[e,t,r]) ==1]
         # print(pe.value(m.x[i,t]) for i,t in E)
     #Returns list of lists of results for each week
@@ -59,6 +50,15 @@ class Model(pre.preprocess):
         for w in range(self.weeks_begin,self.weeks_begin+weeks):
             result_list.append(self.CTT_week(super().get_events_this_week(w),self.set_of_weeks.get("week "+str(w))))
         return result_list
+
+    def remove_var_close_to_banned(self,Index:List[Tuple[int,int,int]]):
+        for e,t,r in Index:
+            duration = self.events.get(e).get("duration")
+            for t_banned in self.banned_keys:
+                if self.timeslots.get(t).get("day") == self.timeslots.get(t_banned).get("day") and t_banned-t <= duration:
+                    Index.remove((e,t,r))
+                    break
+        return Index
 
     #Prints weekly tables for given courses
     def write_time_table_for_course(self,result: List[List[Tuple[Union[int,int,int]]]],courses: Tuple[str]):
