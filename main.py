@@ -5,7 +5,6 @@ import sys
 from optparse import OptionParser
 import data
 import model
-
 # import config
 from datetime import datetime
 
@@ -18,11 +17,16 @@ def main():
     (options, args) = parser.parse_args()  # by default it uses sys.argv[1:]
     if not len(args) == 1:
         parser.error("Directory missing")
-
     dirname = args[0]
     instance = data.Data(dirname)
-    print(instance.events)
+    slots,banned = instance.slots,instance.banned
+    m = model.Model(instance.events,instance.slots,instance.banned,{1:{"size":20}},{})
+    print(m.CTT(1))
 
+    # print(m.set_of_weeks.get('week 6'))
+    # print(m.get_events_this_week(6))
+    # print(m.events.get(1758))
+    # print({key:value for key,value in m.timeslots.items() if value not in m.banned})
 
 
 if __name__ == "__main__":
