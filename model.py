@@ -28,13 +28,7 @@ class Model(pre.preprocess):
         m.events_must_happen = pe.ConstraintList()
         for e in E:
             m.events_must_happen.add(sum(m.x[e,t,r] for _,t,r in list(filter(lambda x: e == x[0],Index)))==1)
-
-        #
-        # # each event must happen exactly 1
-        # for i in events:
-        #     m.c.add(sum(m.x[i,t] for t in times) == 1)
-        #
-        # # Ensure consecutive events
+        # # Ensure consecutive events - Precedence constraint
         # if consec_events != None:
         #     for t_tilde in times:
         #         for u,v in consec_events:
