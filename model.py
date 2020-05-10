@@ -12,16 +12,16 @@ class Model(pre.preprocess):
         super().__init__(events,slots,banned,rooms,teachers)
 
     ## Weekly model. Timeslots and events for one week
-    def CTT_week(self,events:dict,timeslots:dict):
+    def CTT_week(self,events:dict,timeslots:dict,week: int):
         m = pe.ConcreteModel()
         #Only include timeslots that are not banned
-        T = [item for key,sublist in timeslots.items() for item in sublist if self.timeslots.get(item) not in self.banned]
-        # print(self.banned)
+        T = [item for key,sublist in timeslots.items() for item in sublist if item not in self.banned_keys]
+        # print()
         E = [key for key in events]
         R = [key for key in self.rooms]
-        Index = [(e,t,r) for e in E for t in T for r in R]
+        Index_old = [(e,t,r) for e in E for t in T for r in R]
         #Remove unnecessary indexes
-        Index = self.remove_var_close_to_banned(Index)
+        Index = self.remove_var_close_to_banned(Index_old)
         m.x = pe.Var(Index, domain = pe.Binary)
         m.obj=pe.Objective(expr=1)
         #All events must happen
@@ -42,17 +42,20 @@ class Model(pre.preprocess):
     def CTT(self,weeks: int):
         result_list = [] #
         for w in range(self.weeks_begin,self.weeks_begin+weeks):
-            result_list.append(self.CTT_week(super().get_events_this_week(w),self.set_of_weeks.get("week "+str(w))))
+            result_list.append(self.CTT_week(super().get_events_this_week(w),self.set_of_weeks.get("week "+str(w)),w))
         return result_list
 
     def remove_var_close_to_banned(self,Index:List[Tuple[int,int,int]]):
-        for e,t,r in Index:
+        Index_old = Index.copy()
+        Index_new = Index.copy()
+        for e,t,r in Index_old:
             duration = self.events.get(e).get("duration")
             for t_banned in self.banned_keys:
-                if self.timeslots.get(t).get("day") == self.timeslots.get(t_banned).get("day") and t_banned-t <= duration:
-                    Index.remove((e,t,r))
+                if self.timeslots.get(t).get("day") == self.timeslots.get(t_banned).get("day") and abs(t_banned-t) < duration:
+                    Index_new.remove((e,t,r))
+                    print("index: ",(e,t,r))
                     break
-        return Index
+        return Index_new
 
     #Prints weekly tables for given courses
     def write_time_table_for_course(self,result: List[List[Tuple[Union[int,int,int]]]],courses: Tuple[str]):
@@ -60,8 +63,8 @@ class Model(pre.preprocess):
         number_of_weeks = len(result)
         for week_result in result:
             # Set up empty table
-            table = {"Time":[(8+i,9+i) for i in range(12)]}
-            table.update({"day "+str(j):[[] for i in range(11+1)] for j in range(5)})
+            table = {"Time":[(8+i,9+i) for i in range(self.hours+1)]}
+            table.update({"day "+str(j):[[] for i in range(self.hours+1)] for j in range(5)})
             for e,t,r in week_result:
                 if self.events.get(e).get("id")[0:5] in courses:
                     day = self.timeslots.get(t).get("day")

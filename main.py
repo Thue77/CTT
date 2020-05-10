@@ -20,9 +20,11 @@ def main():
     dirname = args[0]
     instance = data.Data(dirname)
     slots,banned = instance.slots,instance.banned
-    m = model.Model(instance.events,instance.slots,instance.banned,{1:{"size":20}},{})
+    m = model.Model(instance.events,instance.slots,instance.banned,{1:{"size":20}},instance.teachers)
     result = m.CTT(1)
-    m.write_time_table_for_course(result,["DM871"])
+    print(result)
+    m.write_time_table_for_course(result,["DM803"])
+    print(m.set_of_weeks.get("week 6"))
 
     # print(m.set_of_weeks.get('week 6'))
     # print(m.get_events_this_week(6))
