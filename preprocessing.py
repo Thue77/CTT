@@ -17,6 +17,7 @@ class preprocess:
         self.set_of_weeks = self.__get_time_week_day() # dict mapping days and weeks to timeslots
         self.events,self.courses = self.__get_events(events)
         self.teacher_conflict_graph = self.get_event_conflict()
+        self.precedence_graph = self.__get_precedence_graph()
 
     #Returns a dict with indexes mapping to rooms and a dict with room index mapping to list of busy timeslots
     def get_rooms(self,rooms):
@@ -138,16 +139,27 @@ class preprocess:
                     if id[0:5] not in course_conflict.get("week "+str(week)):
                         course_conflict.get("week "+str(week)).append(id[0:5])
         return course_conflict
-        # conflict_dict = {"week " + str(i): [] for i in range(self.weeks_begin,self.weeks_end+1)}
-        # for key,List in self.teachers.item():
-        #     for dictionary in List:
-        #         week = dictionary.get("week")
 
+    def get_event_from_id(self,id):
+        for key,value in self.events.items():
+            if value.get("id") == id:
+                return key
+
+    def __get_precedence_graph(self):
+        precedence_graph = {"week " + str(i):[] for i in range(self.weeks_begin,self.weeks_end+1)}
+        for index,event in self.events.items():
+            for arc in event.get("in_arcs"):
+                index_arc = self.get_event_from_id(arc)
+                precedence_graph["week "+str(event.get("week"))].append((index_arc,index))
+        return precedence_graph
+
+test = [(1,2,3),(4,5,6),(7,8,9)]
+for _,_,t in test:
+    print
 
 
 if __name__ == '__main__':
     instance_data = data.Data("C:\\Users\\thom1\\OneDrive\\SDU\\8. semester\\Linear and integer programming\\Part 2\\Material\\CTT\\data\\small")
     instance = preprocess(instance_data.events,instance_data.slots,instance_data.banned,instance_data.rooms,instance_data.teachers)
-    instance.rooms.get(13)
-    instance.rooms
+    instance.precedence_graph
     # %%

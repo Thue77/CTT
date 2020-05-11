@@ -37,22 +37,25 @@ class Model(pre.preprocess):
             for v in A:
                 if u!=v:
                     for t in T:
-                        m.teacher_conflict.add(sum(m.x[u,l,r]+m.x[v,l,r] for r in R for l in range(max(0,t-self.events.get(u).get("duration")+1),t+1) if (u,l,r) in Index and (v,l,r) in Index) <= 1)
+                        if any((u,l,r) in Index for r in R for l in range(max(0,t-self.events.get(u).get("duration")+1),t+1)) or any((v,l,r) in Index for r in R for l in range(max(0,t-self.events.get(u).get("duration")+1),t+1)):
+                            m.teacher_conflict.add(sum(m.x[u,l,r]+m.x[v,l,r] for r in R for l in range(max(0,t-self.events.get(u).get("duration")+1),t+1) if (u,l,r) in Index and (v,l,r) in Index) <= 1)
 
         #One event per day per course:
-        # for day,day_list in timeslots.items():
-        #     print(day)
-        #     print((e,t,r) for e in self.courses.get("DM803") for t in day_list for r in R if (e,t,r) in Index)
         m.one_event_one_day = pe.ConstraintList()
         for course_events in self.courses.values():
             for day in timeslots.values():
                 if any((e,t,r) in Index for e in course_events for t in day for r in R):
                     m.one_event_one_day.add(sum(m.x[e,t,r] for e in course_events for t in day for r in R if (e,t,r) in Index)<=1)
 
+        #Precedence constraints
+        m.precedence = pe.ConstraintList()
+        for u,v in self.precedence_graph.get("week "+str(week)):
+            for t in T:
+                if any((u,l,r) in Index for l in range(timeslots.get("day 0")[0],t) for r in R):
+                    m.precedence.add(sum(m.x[u,l,r]-m.x[v,l,r] for l in range(timeslots.get("day 0")[0],t+1) for r in R if (v,l,r) in Index and (u,l,r) in Index) >= 0)
 
-        # for _,t,r in Index:
-        #     m.teacher_conflict.add(sum(m.x[u,l,r] + m.x[v,l,r] for u in A for v in A for l in range(max(0,t-self.events.get(u).get("duration")+1),t+1) if u != v))
-        # # Ensure consecutive events - Precedence constraint
+
+        # Ensure consecutive events - Precedence constraint
         # if consec_events != None:
         #     for t_tilde in times:
         #         for u,v in consec_events:
@@ -109,8 +112,6 @@ if __name__ == '__main__':
     m = Model(instance_data.events,instance_data.slots,instance_data.banned,instance_data.rooms,instance_data.teachers)
     result = m.CTT(1)
     m.write_time_table_for_course(result,[course for course in m.courses])
-    m.courses
-    m.set_of_weeks.get("week 6")
     # %%
     print(test.set_of_weeks)
     # test.timeslots
