@@ -4,7 +4,7 @@ from typing import Dict,List,Tuple,Union
 class preprocess:
     """docstring for preprocess."""
 
-    def __init__(self,events: Dict[str,dict], slots: List[dict], banned: List[dict], rooms: dict, teachers: Dict[str,List[Dict[str,Union[str,int]]]]):
+    def __init__(self,events: Dict[str,dict], slots: List[dict], banned: List[dict], rooms: Dict[str,Dict[str,Union[str,list]]], teachers: Dict[str,List[Dict[str,Union[str,int]]]]):
         self.banned = banned #Banned timeslots
         self.slots = slots #All timeslots
         self.teachers = teachers
@@ -12,11 +12,19 @@ class preprocess:
         self.days = self.get_days() #The max number of days per week
         self.hours = self.get_hours() #The max number of hours per day
         self.timeslots = self.get_sorted_times() #dictionary of timeslots
+        self.rooms,self.rooms_busy = self.get_rooms(rooms)
         self.banned_keys = self.get_banned_keys()
         self.set_of_weeks = self.__get_time_week_day() # dictionary mapping days and weeks to timeslots
         self.events,self.courses = self.__get_events(events)
         self.teacher_conflict_graph = self.get_event_conflict()
-        self.rooms = rooms
+
+    def get_rooms(self,rooms):
+        rooms_indexed = {}
+        rooms_busy = {}
+        for index,value in enumerate(rooms.values()):
+            rooms_indexed[index] = value.get("id")
+            rooms_busy[index] = [self.get_dict_key(self.timeslots,time) for time in value.get("busy")]
+        return rooms_indexed,rooms_busy
 
     #Get the starting and ending weeks
     def get_weeks(self):
@@ -100,11 +108,11 @@ class preprocess:
         return temp
 
     #Currently not used. It gets the key based on the value
-    def __get_dict_key(self,dict:dict,val):
-        for key,value in dict.item():
+    def get_dict_key(self,dictionary:dict,val):
+        for key,value in dictionary.items():
             if value == val:
                 return key
-        print("Something went wrong with the _get_dict_key() method")
+        # print("Something went wrong with the _get_dict_key() method for value: {}".format(val))
 
     '''Could work for both students and teacher'''
     #Returns dict with week number as key and a list of event conflicts in terms of indexes for that week as value
@@ -138,12 +146,6 @@ class preprocess:
 
 if __name__ == '__main__':
     instance_data = data.Data("C:\\Users\\thom1\\OneDrive\\SDU\\8. semester\\Linear and integer programming\\Part 2\\Material\\CTT\\data\\small")
-    instance = preprocess(instance_data.events,instance_data.slots,instance_data.banned,{1:{'size':20}},instance_data.teachers)
-    instance.teacher_conflict_graph
+    instance = preprocess(instance_data.events,instance_data.slots,instance_data.banned,instance_data.rooms,instance_data.teachers)
+    instance.rooms
     # %%
-    test = {'week 0': {'day 0': [], 'day 1': []}, 'week 1': {'day 0': [], 'day 1': []}, 'week 2': {'day 0': [], 'day 1': []}}
-    test['week 0']['day 0'] = [1,2,3]
-    print(instance.events.get(0).get('id')[0:5])
-    print(sorted(times.get("slots"),key = lambda k : (k['week'],k['day'],k['hour'])))
-    test = [[{'day0': [], 'day1': []}]]
-    test[-1][0]['day0']

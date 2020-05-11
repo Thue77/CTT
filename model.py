@@ -45,7 +45,7 @@ class Model(pre.preprocess):
         #         for u,v in consec_events:
         #             m.c.add(sum(m.x[u,t]-m.x[v,t] for t in  range(1,t_tilde+1) if t not in timeslots.get("banned"))>=0)
         solver = pyomo.opt.SolverFactory('glpk')
-        results = solver.solve(m,tee=False)
+        results = solver.solve(m,tee=True)
         return [(e,t,r) for e,t,r in Index if pe.value(m.x[e,t,r]) ==1]
     #Returns list of lists of results for each week
     def CTT(self,weeks: int):
