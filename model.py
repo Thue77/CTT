@@ -16,7 +16,6 @@ class Model(pre.preprocess):
         m = pe.ConcreteModel()
         #Only include timeslots that are not banned
         T = [item for key,sublist in timeslots.items() for item in sublist if item not in self.banned_keys]
-        # print()
         E = [key for key in events]
         R = [key for key in self.rooms]
         Index_old = [(e,t,r) for e in E for t in T for r in R]
@@ -54,12 +53,6 @@ class Model(pre.preprocess):
                 if any((u,l,r) in Index for l in range(timeslots.get("day 0")[0],t) for r in R):
                     m.precedence.add(sum(m.x[u,l,r]-m.x[v,l,r] for l in range(timeslots.get("day 0")[0],t+1) for r in R if (v,l,r) in Index and (u,l,r) in Index) >= 0)
 
-
-        # Ensure consecutive events - Precedence constraint
-        # if consec_events != None:
-        #     for t_tilde in times:
-        #         for u,v in consec_events:
-        #             m.c.add(sum(m.x[u,t]-m.x[v,t] for t in  range(1,t_tilde+1) if t not in timeslots.get("banned"))>=0)
         solver = pyomo.opt.SolverFactory('glpk')
         results = solver.solve(m,tee=True)
         return [(e,t,r) for e,t,r in Index if pe.value(m.x[e,t,r]) ==1]
@@ -67,6 +60,7 @@ class Model(pre.preprocess):
     def CTT(self,weeks: int):
         result_list = []
         for w in range(self.weeks_begin,self.weeks_begin+weeks):
+            # w=9
             print("Solves for week ",w)
             result_list.append(self.CTT_week(super().get_events_this_week(w),self.set_of_weeks.get("week "+str(w)),w))
         return result_list
@@ -104,6 +98,21 @@ class Model(pre.preprocess):
                     table["day "+ str(day)][hour].append(self.events.get(e).get("id")[0:7])
             print("Week {}\n {}".format(week+self.weeks_begin,pd.DataFrame(table)))
 
+    #Prints time tables for the rooms
+    def write_time_table_for_room(self,result: List[List[Tuple[Union[int,int,int]]]],rooms: Tuple[str]):
+        number_of_weeks = len(result)
+        for week,week_result in enumerate(result):
+            for room in rooms:
+                # Set up empty table
+                table = {"Time":[(8+i,9+i) for i in range(self.hours+1)]}
+                table.update({"day "+str(j):[[] for i in range(self.hours+1)] for j in range(5)})
+                for e,t,r in week_result:
+                    if self.rooms.get(r) == room:
+                        day = self.timeslots.get(t).get("day")
+                        hour = self.timeslots.get(t).get("hour")
+                        table["day "+ str(day)][hour].append(self.events.get(e).get("id")[0:7])
+                print("Room {}\n {}".format(room,pd.DataFrame(table)))
+
 
 
 
@@ -112,6 +121,7 @@ if __name__ == '__main__':
     m = Model(instance_data.events,instance_data.slots,instance_data.banned,instance_data.rooms,instance_data.teachers)
     result = m.CTT(1)
     m.write_time_table_for_course(result,[course for course in m.courses])
+    m.write_time_table_for_room(result,[room for room in m.rooms.values()])
     # %%
     print(test.set_of_weeks)
     # test.timeslots
