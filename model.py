@@ -12,7 +12,7 @@ class Model(pre.preprocess):
         super().__init__(events,slots,banned,rooms,teachers)
 
     ## Weekly model. Timeslots and events for one week
-    def CTT_week(self,events:dict,timeslots:dict,week: int):
+    def CTT_week(self,events:dict,timeslots:Dict[str,List[int]],week: int):
         m = pe.ConcreteModel()
         #Only include timeslots that are not banned
         T = [item for key,sublist in timeslots.items() for item in sublist if item not in self.banned_keys]
@@ -21,7 +21,8 @@ class Model(pre.preprocess):
         R = [key for key in self.rooms]
         Index_old = [(e,t,r) for e in E for t in T for r in R]
         #Remove unnecessary indexes
-        Index = self.remove_var_close_to_banned(Index_old)
+        Index = self.remove_busy_room(self.remove_var_close_to_banned(Index_old))
+
         m.x = pe.Var(Index, domain = pe.Binary)
         m.obj=pe.Objective(expr=1)
         #All events must happen
@@ -37,6 +38,18 @@ class Model(pre.preprocess):
                 if u!=v:
                     for t in T:
                         m.teacher_conflict.add(sum(m.x[u,l,r]+m.x[v,l,r] for r in R for l in range(max(0,t-self.events.get(u).get("duration")+1),t+1) if (u,l,r) in Index and (v,l,r) in Index) <= 1)
+
+        #One event per day per course:
+        # for day,day_list in timeslots.items():
+        #     print(day)
+        #     print((e,t,r) for e in self.courses.get("DM803") for t in day_list for r in R if (e,t,r) in Index)
+        m.one_event_one_day = pe.ConstraintList()
+        for course_events in self.courses.values():
+            for day in timeslots.values():
+                if any((e,t,r) in Index for e in course_events for t in day for r in R):
+                    m.one_event_one_day.add(sum(m.x[e,t,r] for e in course_events for t in day for r in R if (e,t,r) in Index)<=1)
+
+
         # for _,t,r in Index:
         #     m.teacher_conflict.add(sum(m.x[u,l,r] + m.x[v,l,r] for u in A for v in A for l in range(max(0,t-self.events.get(u).get("duration")+1),t+1) if u != v))
         # # Ensure consecutive events - Precedence constraint
@@ -66,6 +79,14 @@ class Model(pre.preprocess):
                     break
         return Index_new
 
+    def remove_busy_room(self, Index: List[Tuple[int,int,int]]):
+        Index_old = Index.copy()
+        Index_new = Index.copy()
+        for e,t,r in Index_old:
+            if t in self.rooms_busy.get(r):
+                Index_new.remove((e,t,r))
+        return Index_new
+
     #Prints weekly tables for given courses
     def write_time_table_for_course(self,result: List[List[Tuple[Union[int,int,int]]]],courses: Tuple[str]):
         number_of_weeks = len(result)
@@ -85,9 +106,11 @@ class Model(pre.preprocess):
 
 if __name__ == '__main__':
     instance_data = data.Data("C:\\Users\\thom1\\OneDrive\\SDU\\8. semester\\Linear and integer programming\\Part 2\\Material\\CTT\\data\\small")
-    m = Model(instance_data.events,instance_data.slots,instance_data.banned,{1:{'size':20}},instance_data.teachers)
-    result = m.CTT(2)
-    m.write_time_table_for_course(result,["DM865","DM846","DM873"])
+    m = Model(instance_data.events,instance_data.slots,instance_data.banned,instance_data.rooms,instance_data.teachers)
+    result = m.CTT(1)
+    m.write_time_table_for_course(result,[course for course in m.courses])
+    m.courses
+    m.set_of_weeks.get("week 6")
     # %%
     print(test.set_of_weeks)
     # test.timeslots

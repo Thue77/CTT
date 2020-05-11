@@ -18,7 +18,7 @@ def main():
 
     instance = data.Data(args.dirname)
     m = model.Model(instance.events,instance.slots,instance.banned,instance.rooms,instance.teachers)
-    result = m.CTT(m.weeks_end-m.weeks_begin+1)
+    result = m.CTT(1)#m.CTT(m.weeks_end-m.weeks_begin+1)
     m.write_time_table_for_course(result,[course for course in m.courses])
 
 

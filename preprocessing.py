@@ -14,10 +14,11 @@ class preprocess:
         self.timeslots = self.get_sorted_times() #dictionary of timeslots
         self.rooms,self.rooms_busy = self.get_rooms(rooms)
         self.banned_keys = self.get_banned_keys()
-        self.set_of_weeks = self.__get_time_week_day() # dictionary mapping days and weeks to timeslots
+        self.set_of_weeks = self.__get_time_week_day() # dict mapping days and weeks to timeslots
         self.events,self.courses = self.__get_events(events)
         self.teacher_conflict_graph = self.get_event_conflict()
 
+    #Returns a dict with indexes mapping to rooms and a dict with room index mapping to list of busy timeslots
     def get_rooms(self,rooms):
         rooms_indexed = {}
         rooms_busy = {}
@@ -147,5 +148,6 @@ class preprocess:
 if __name__ == '__main__':
     instance_data = data.Data("C:\\Users\\thom1\\OneDrive\\SDU\\8. semester\\Linear and integer programming\\Part 2\\Material\\CTT\\data\\small")
     instance = preprocess(instance_data.events,instance_data.slots,instance_data.banned,instance_data.rooms,instance_data.teachers)
+    instance.rooms.get(13)
     instance.rooms
     # %%
