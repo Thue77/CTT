@@ -22,12 +22,12 @@ class Model(pre.preprocess):
         #Only include timeslots that are not banned
         T = []
         for week in range(self.weeks_begin,self.weeks_end+1):
-            for day,time_list in self.split_timeslots.get("week "+str(week)).items():
-                T.extend([time for time in time_list if time not in self.banned_keys])
+            for day,period_list in self.split_periods.get("week "+str(week)).items():
+                T.extend([period for period in period_list if set(self.banned_keys).isdisjoint(set(period))])
         E = [key for key in self.events]
-        Index_old = [(e,t) for e in E for t in T]
+        Index = [(e,t) for e in E for t in T]
         #Remove unnecessary indexes
-        Index = self.remove_var_close_to_banned(Index_old)
+        # Index = self.remove_var_close_to_banned(Index_old)
 
         m.x = pe.Var(Index, domain = pe.Binary)
         m.obj=pe.Objective(expr=1)
@@ -38,13 +38,13 @@ class Model(pre.preprocess):
                 m.events_must_happen.add(sum(m.x[e,t] for _,t in list(filter(lambda x: e == x[0],Index)))==1)
 
         #Precedence constraints
-        m.precedence = pe.ConstraintList()
-        for w in range(self.weeks_begin,self.weeks_end+1):
-            starting_index = self.split_timeslots.get("week "+str(w)).get("day 0")[0]
-            for u,v in self.precedence_graph.get("week "+str(w)):
-                for t in T:
-                    if any((u,l) in Index for l in range(starting_index,t)):
-                        m.precedence.add(sum(m.x[u,l]-m.x[v,l] for l in range(starting_index,t+1) if (v,l) in Index and (u,l) in Index) >= 0)
+        # m.precedence = pe.ConstraintList()
+        # for w in range(self.weeks_begin,self.weeks_end+1):
+        #     starting_index = self.split_timeslots.get("week "+str(w)).get("day 0")[0]
+        #     for u,v in self.precedence_graph.get("week "+str(w)):
+        #         for t in T:
+        #             if any((u,l) in Index for l in range(starting_index,t)):
+        #                 m.precedence.add(sum(m.x[u,l]-m.x[v,l] for l in range(starting_index,t+1) if (v,l) in Index and (u,l) in Index) >= 0)
 
         #No teacher conflicts
         # m.teacher_conflict = pe.ConstraintList()

@@ -14,7 +14,7 @@ class preprocess:
         self.hours = self.get_hours() #The max number of hours per day
         self.timeslots = self.get_sorted_times() #dictionary of timeslots
         self.split_timeslots = self.__get_time_week_day() #dict mapping days and weeks to timeslots
-        self.split_periods = self.__get_sorted_periods()
+        self.periods,self.split_periods = self.__get_sorted_periods()
         self.rooms,self.rooms_busy = self.get_rooms(rooms)
         self.rooms_at_t,self.rooms_at_t_count = self.get_rooms_at_t()
         self.banned_keys = self.get_banned_keys()
@@ -71,8 +71,15 @@ class preprocess:
 
 
     def __get_sorted_periods(self):
-        split_periods = {week:{day:self.__get_duration_sized_tuple(list_pair) for day,list_pair in day_dict.items()} for week,day_dict in self.split_timeslots.items()}
-        return split_periods
+        periods_old = self.__get_duration_sized_tuple(list(self.timeslots.values()))
+        periods = {index:pair for index,pair in enumerate(periods_old) if pair[0].get('week')==pair[1].get('week') and pair[0].get('day')==pair[1].get('day')}
+        split_periods = {week:{day:[] for day in ["day " + str(i) for i in range(self.days)]} for week in ["week " + str(i) for i in range(self.weeks_begin,self.weeks_end+1)]}
+        for index,pair in periods.items():
+            split_periods["week "+str(pair[0].get('week'))]["day "+str(pair[0].get('day'))].append(index)
+        # split_periods = {week:{day:[index for index,pair in periods.items() if pair.get('')] for day in ["day " + str(i) for i in range(self.days)]} for week in ["week " + str(i) for i in range(self.weeks_begin,self.weeks_end+1)]}
+
+        # split_periods = {week:{day:self.__get_duration_sized_tuple(list_pair) for day,list_pair in day_dict.items()} for week,day_dict in self.split_timeslots.items()}
+        return periods,split_periods
 
     #Returns list of keys corresponding to banned timeslots
     def get_banned_keys(self):
@@ -194,3 +201,6 @@ if __name__ == '__main__':
     # %%
     instance.split_timeslots.get('week 8').get("day 1")
     instance.split_periods
+    instance.periods
+    instance.rooms
+    instance.rooms_busy
