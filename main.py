@@ -17,9 +17,10 @@ def main():
     args = parser.parse_args()  # by default it uses sys.argv[1:]
 
     instance = data.Data(args.dirname)
-    m = model.Model(instance.events,instance.slots,instance.banned,instance.rooms,instance.teachers)
+    rooms = {'Odense U151': instance.rooms.get('Odense U151'),'Odense U154':instance.rooms.get('Odense U163'),'Odense U163':instance.rooms.get('Odense U163')}
+    m = model.Model(instance.events,instance.slots,instance.banned,rooms,instance.teachers)
     result = m.CTT(1)#m.CTT(m.weeks_end-m.weeks_begin+1)
-    m.write_time_table_for_course(result,[course for course in m.courses])
+    # m.write_time_table_for_course(result,[course for course in m.courses])
 
 
 if __name__ == "__main__":

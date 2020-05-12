@@ -12,12 +12,20 @@ class preprocess:
         self.days = self.get_days() #The max number of days per week
         self.hours = self.get_hours() #The max number of hours per day
         self.timeslots = self.get_sorted_times() #dictionary of timeslots
+        self.split_timeslots = self.__get_time_week_day()
         self.rooms,self.rooms_busy = self.get_rooms(rooms)
+        self.rooms_at_t,self.rooms_at_t_count = self.get_rooms_at_t()
         self.banned_keys = self.get_banned_keys()
         self.set_of_weeks = self.__get_time_week_day() # dict mapping days and weeks to timeslots
         self.events,self.courses = self.__get_events(events)
         self.teacher_conflict_graph = self.get_event_conflict()
         self.precedence_graph = self.__get_precedence_graph()
+
+    #Returns dict with time as key and a list of available rooms at that time, and length of lists
+    def get_rooms_at_t(self):
+        R_t = {t:[r for r in self.rooms if t not in self.rooms_busy.get(r)] for t in self.timeslots}
+        R_t_len = {t:len(room_list) for t,room_list in R_t.items()}
+        return R_t,R_t_len
 
     #Returns a dict with indexes mapping to rooms and a dict with room index mapping to list of busy timeslots
     def get_rooms(self,rooms):
@@ -116,6 +124,14 @@ class preprocess:
                 return key
         # print("Something went wrong with the _get_dict_key() method for value: {}".format(val))
 
+
+    def __all_pairings(self,list_to_pair: List):
+        list_of_pairs = []
+        for index,p1 in enumerate(list_to_pair):
+            for p2 in list_to_pair[index+1:]:
+                list_of_pairs.append((p1,p2))
+        return list_of_pairs
+
     '''Could work for both students and teacher'''
     #Returns dict with week number as key and a list of event conflicts in terms of indexes for that week as value
     def get_event_conflict(self):
@@ -126,8 +142,10 @@ class preprocess:
             for index,event_dict in self.get_events_this_week(week).items():
                 if event_dict.get("id")[0:5] in course_conflict.get(current_week):
                     event_conflict[current_week].append(index)
-        return event_conflict
 
+        for week_number,conflict_list in event_conflict.items():
+            event_conflict[week_number] = self.__all_pairings(conflict_list)
+        return event_conflict
 
     #Returns dict week number as key and a list of course conflicts for that week as value
     def __get_course_conflict(self):
@@ -153,13 +171,13 @@ class preprocess:
                 precedence_graph["week "+str(event.get("week"))].append((index_arc,index))
         return precedence_graph
 
-test = [(1,2,3),(4,5,6),(7,8,9)]
-for _,_,t in test:
-    print
 
 
 if __name__ == '__main__':
-    instance_data = data.Data("C:\\Users\\thom1\\OneDrive\\SDU\\8. semester\\Linear and integer programming\\Part 2\\Material\\CTT\\data\\small")
+    # instance_data = data.Data("C:\\Users\\thom1\\OneDrive\\SDU\\8. semester\\Linear and integer programming\\Part 2\\Material\\CTT\\data\\small")
+    instance_data = data.Data("C:\\Users\\thom1\\OneDrive\\SDU\\8. semester\\Linear and integer programming\\Part 2\\01Project\\data_baby_ex")
     instance = preprocess(instance_data.events,instance_data.slots,instance_data.banned,instance_data.rooms,instance_data.teachers)
-    instance.precedence_graph
+    instance.split_timeslots
+    instance.weeks_end
+
     # %%
