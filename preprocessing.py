@@ -25,9 +25,10 @@ class preprocess:
 
     #Returns dict with time as key and a list of available rooms at that time, and length of lists
     def get_rooms_at_t(self):
-        R_t = {t:[r for r in self.rooms if t not in self.rooms_busy.get(r)] for t in self.timeslots}
+        R_t = {index:[r for r in self.rooms if set([self.get_dict_key(self.timeslots,p) for p in pair]).isdisjoint(set(self.rooms_busy.get(r)))] for index,pair in self.periods.items() }
         R_t_len = {t:len(room_list) for t,room_list in R_t.items()}
         return R_t,R_t_len
+
 
     #Returns a dict with indexes mapping to rooms and a dict with room index mapping to list of busy timeslots
     def get_rooms(self,rooms):
@@ -69,16 +70,13 @@ class preprocess:
             temp[index] = time
         return temp
 
-
+    '''Should not depend on the period being 2. Use all()'''
     def __get_sorted_periods(self):
         periods_old = self.__get_duration_sized_tuple(list(self.timeslots.values()))
         periods = {index:pair for index,pair in enumerate(periods_old) if pair[0].get('week')==pair[1].get('week') and pair[0].get('day')==pair[1].get('day')}
         split_periods = {week:{day:[] for day in ["day " + str(i) for i in range(self.days)]} for week in ["week " + str(i) for i in range(self.weeks_begin,self.weeks_end+1)]}
         for index,pair in periods.items():
-            split_periods["week "+str(pair[0].get('week'))]["day "+str(pair[0].get('day'))].append(index)
-        # split_periods = {week:{day:[index for index,pair in periods.items() if pair.get('')] for day in ["day " + str(i) for i in range(self.days)]} for week in ["week " + str(i) for i in range(self.weeks_begin,self.weeks_end+1)]}
-
-        # split_periods = {week:{day:self.__get_duration_sized_tuple(list_pair) for day,list_pair in day_dict.items()} for week,day_dict in self.split_timeslots.items()}
+            split_periods["week "+str(pair[0].get('week'))]["day "+str(pair[0].get('day'))].append(index) # This is okay. All should already be on same day in same week
         return periods,split_periods
 
     #Returns list of keys corresponding to banned timeslots
@@ -200,6 +198,8 @@ if __name__ == '__main__':
     instance = preprocess(instance_data.events,instance_data.slots,instance_data.banned,instance_data.rooms,instance_data.teachers,instance_data.students)
     # %%
     instance.split_timeslots.get('week 8').get("day 1")
+    instance.rooms_at_t
+    instance.banned
     instance.split_periods
     instance.periods
     instance.rooms

@@ -23,7 +23,7 @@ class Model(pre.preprocess):
         T = []
         for week in range(self.weeks_begin,self.weeks_end+1):
             for day,period_list in self.split_periods.get("week "+str(week)).items():
-                T.extend([period for period in period_list if set(self.banned_keys).isdisjoint(set(period))])
+                T.extend([p for p in period_list if all(time not in self.banned for time in self.periods.get(p))])
         E = [key for key in self.events]
         Index = [(e,t) for e in E for t in T]
         #Remove unnecessary indexes
@@ -34,8 +34,8 @@ class Model(pre.preprocess):
         #All events must happen
         m.events_must_happen = pe.ConstraintList()
         for e in E:
-            if any((e,t) in Index for _,t in list(filter(lambda x: e == x[0],Index))):
-                m.events_must_happen.add(sum(m.x[e,t] for _,t in list(filter(lambda x: e == x[0],Index)))==1)
+            if any((e,p) in Index for _,p in list(filter(lambda x: e == x[0],Index))):
+                m.events_must_happen.add(sum(m.x[e,p] for _,p in list(filter(lambda x: e == x[0],Index)))==1)
 
         #Precedence constraints
         # m.precedence = pe.ConstraintList()
@@ -56,47 +56,50 @@ class Model(pre.preprocess):
         #                 m.teacher_conflict.add(sum(m.x[u,l]+m.x[v,l] for l in range(max(0,t-self.events.get(u).get("duration")+1),t+1) if (u,l) in Index and (v,l) in Index) <= 1)
 
 
-
         #Ensure feasibility of the matching problem
         m.available_room = pe.ConstraintList()
-        for t,time_dict in self.timeslots.items():
-            week = time_dict.get("week")
-            starting_index = self.split_timeslots.get("week "+str(week)).get("day 0")[0]
-            events = self.get_events_this_week(week)
-            if any((e,t) in Index for e in events):
-                m.available_room.add(sum(m.x[e,l] for e in events for l in range(max(starting_index,t-self.events.get(e).get("duration")+1),t+1) if (e,l) in Index)<=self.rooms_at_t_count.get(t))
+        for p in self.periods:
+            if any((e,p) for e,_ in list(filter(lambda x: x[1] == p,Index))):
+                m.available_room.add(sum(m.x[e,p] for e,_ in list(filter(lambda x: x[1] == p,Index)))<= self.rooms_at_t_count.get(p))
+
+        # for t,time_dict in self.timeslots.items():
+        #     week = time_dict.get("week")
+        #     starting_index = self.split_timeslots.get("week "+str(week)).get("day 0")[0]
+        #     events = self.get_events_this_week(week)
+        #     if any((e,t) in Index for e in events):
+        #         m.available_room.add(sum(m.x[e,l] for e in events for l in range(max(starting_index,t-self.events.get(e).get("duration")+1),t+1) if (e,l) in Index)<=self.rooms_at_t_count.get(t))
 
 
         solver = pyomo.opt.SolverFactory('glpk')
         results = solver.solve(m,tee=True)
-        return [[(e,t) for e,t in Index if pe.value(m.x[e,t]) ==1]]
+        return [(e,t) for e,t in Index if pe.value(m.x[e,t]) ==1]
 
     def matching_rooms(self,result):
         m = pe.ConcreteModel()
 
-        E_list = [event for week_result in result for event in week_result]
-        times = set([event[1] for event in E_list])
-        E = {i:event for i,event in enumerate(E_list)}
+        # E_list = [event for week_result in result for event in week_result]
+        E = {i:event for i,event in enumerate(result)}
+        periods = set([event[1] for event in E.values()])
         print("E: ",E)
-        consecutive_events = [(event1[0],event2[0]) for index,event1 in enumerate(E_list) for event2 in E_list[index+1:] if abs(event1[1]-event2[1])<=max(self.events.get(event1[0]).get("duration"),self.events.get(event2[0]).get("duration"))]
-        print("Consec: ",consecutive_events)
-        R_list = [(room,t) for room in self.rooms for t in times]
+        # consecutive_events = [(event1[0],event2[0]) for index,event1 in enumerate(E_list) for event2 in E_list[index+1:] if abs(event1[1]-event2[1])<=max(self.events.get(event1[0]).get("duration"),self.events.get(event2[0]).get("duration"))]
+        # print("Consec: ",consecutive_events)
+        R_list = [(r,p) for r in self.rooms for p in periods if p not in self.rooms_busy.get(r)]
         R = {i:room for i,room in enumerate(R_list)}
         print("Rooms: ", R)
-        A = [(i,j) for i,e in E.items() for j,room in R.items() if e[1] == room[1]]#self.compatible_event_room(E,R)
+        A = [(i,j) for i,e in E.items() for j,room in R.items() if e[1] == room[1]]
         print(A)
         # print([(self.events.get(E.get(i)[0]),self.rooms.get(R.get(j)[0])) for i,j in A])
 
         m.x = pe.Var(A,domain=pe.Binary)
         m.obj = pe.Objective(expr=1)
 
-        def con_rule(m,r1,r2,i,ii):
-            # print("OUTSIDE: r:{}, i:{}, ii:{}".format(r,i,ii))
-            if (i,r1) in A and (ii,r2) in A:
-                return m.x[i,r1] + m.x[ii,r2] <=1
-            else:
-                return pe.Constraint.Skip
-        m.consecutive_events= pe.Constraint(R.keys(),R.keys(),consecutive_events,rule=con_rule)
+        # def con_rule(m,r1,r2,i,ii):
+        #     # print("OUTSIDE: r:{}, i:{}, ii:{}".format(r,i,ii))
+        #     if (i,r1) in A and (ii,r2) in A:
+        #         return m.x[i,r1] + m.x[ii,r2] <=1
+        #     else:
+        #         return pe.Constraint.Skip
+        # m.consecutive_events= pe.Constraint(R.keys(),R.keys(),consecutive_events,rule=con_rule)
 
 
         m.balance_constraints = pe.ConstraintList()
@@ -104,8 +107,6 @@ class Model(pre.preprocess):
             relvant_indexes = list(filter(lambda x:x[1]==j,A))
             if any((i,j) in A for i,_ in relvant_indexes):
                 m.balance_constraints.add(sum(m.x[i,j] for i,_ in relvant_indexes)<=1)
-
-
         for i in E:
             relvant_indexes = list(filter(lambda x:x[0]==i,A))
             if any((i,j) in A for _,j in relvant_indexes):
@@ -259,14 +260,14 @@ class Model(pre.preprocess):
             busy_or_banned = set()
             for room in self.rooms:
                 busy_or_banned = set(self.rooms_busy.get(room)) if len(busy_or_banned) == 0 else busy_or_banned & set(self.rooms_busy.get(room))
-            # table.update({"day "+str(j):[[] for i in range(self.hours+1)] for j in range(5)})
             busy_or_banned |= set(self.banned_keys)
             table.update({"day "+str(j):[["busy"] if m.get_dict_key(m.timeslots,{'day':j,'hour':i,'week':week}) in busy_or_banned  else [] for i in range(self.hours+1)] for j in range(5)})
             for x in week_result:
                 if self.events.get(x[0]).get("id")[0:5] in courses:
-                    day = self.timeslots.get(x[1]).get("day")
-                    hour = self.timeslots.get(x[1]).get("hour")
-                    table["day "+ str(day)][hour].append(self.events.get(x[0]).get("id")[0:7])
+                    day = self.periods.get(x[1])[0].get("day")
+                    hour = self.periods.get(x[1])[0].get("hour")
+                    for i in range(m.period):
+                        table["day "+ str(day)][hour+i].append(self.events.get(x[0]).get("id")[0:7])
             print("Week {}\n {}".format(week+self.weeks_begin,pd.DataFrame(table)))
 
     #Prints time tables for the rooms
@@ -279,14 +280,53 @@ class Model(pre.preprocess):
                 table = {"Time":[(8+i,9+i) for i in range(self.hours+1)]}
                 busy_or_banned = set(self.rooms_busy.get(self.get_dict_key(self.rooms,room))) | set(self.banned_keys)
                 table.update({"day "+str(j):[["busy"] if m.get_dict_key(m.timeslots,{'day':j,'hour':i,'week':week}) in busy_or_banned  else [] for i in range(self.hours+1)] for j in range(5)})
-                for e,t,r in week_result:
-                    day = self.timeslots.get(t).get("day")
-                    hour = self.timeslots.get(t).get("hour")
-                    if self.rooms.get(r) == room:
-                        table["day "+ str(day)][hour].append(self.events.get(e).get("id")[0:7])
-                    elif t in self.rooms_busy.get(r):
-                        table["day "+ str(day)][hour].append("Busy")
+                for e,p,r in list(filter(lambda x: x[2] == m.get_dict_key(m.rooms,room),week_result)):
+                    day = self.periods.get(p)[0].get("day")
+                    hour = self.periods.get(p)[0].get("hour")
+                    for i in range(self.period):
+                        table["day "+ str(day)][hour+i].append(self.events.get(e).get("id")[0:7])
+                    # elif t in self.rooms_busy.get(r):
+                    #     table["day "+ str(day)][hour].append("Busy")
                 print("Room {}\n {}".format(room,pd.DataFrame(table)))
+
+    # #Prints weekly tables for given courses
+    # def write_time_table_for_course(self,result: List[List[Tuple[Union[int,int]]]],courses: Tuple[str]):
+    #     number_of_weeks = len(result)
+    #     for w,week_result in enumerate(result):
+    #         week = w + self.weeks_begin
+    #         # Set up empty table
+    #         table = {"Time":[(8+i,9+i) for i in range(self.hours+1)]}
+    #         busy_or_banned = set()
+    #         for room in self.rooms:
+    #             busy_or_banned = set(self.rooms_busy.get(room)) if len(busy_or_banned) == 0 else busy_or_banned & set(self.rooms_busy.get(room))
+    #         # table.update({"day "+str(j):[[] for i in range(self.hours+1)] for j in range(5)})
+    #         busy_or_banned |= set(self.banned_keys)
+    #         table.update({"day "+str(j):[["busy"] if m.get_dict_key(m.timeslots,{'day':j,'hour':i,'week':week}) in busy_or_banned  else [] for i in range(self.hours+1)] for j in range(5)})
+    #         for x in week_result:
+    #             if self.events.get(x[0]).get("id")[0:5] in courses:
+    #                 day = self.timeslots.get(x[1]).get("day")
+    #                 hour = self.timeslots.get(x[1]).get("hour")
+    #                 table["day "+ str(day)][hour].append(self.events.get(x[0]).get("id")[0:7])
+    #         print("Week {}\n {}".format(week+self.weeks_begin,pd.DataFrame(table)))
+    #
+    # #Prints time tables for the rooms
+    # def write_time_table_for_room(self,result: List[List[Tuple[Union[int,int,int]]]],rooms: Tuple[str]):
+    #     number_of_weeks = len(result)
+    #     for w,week_result in enumerate(result):
+    #         week = w + self.weeks_begin
+    #         for room in rooms:
+    #             # Set up empty table indicating slots that are not available
+    #             table = {"Time":[(8+i,9+i) for i in range(self.hours+1)]}
+    #             busy_or_banned = set(self.rooms_busy.get(self.get_dict_key(self.rooms,room))) | set(self.banned_keys)
+    #             table.update({"day "+str(j):[["busy"] if m.get_dict_key(m.timeslots,{'day':j,'hour':i,'week':week}) in busy_or_banned  else [] for i in range(self.hours+1)] for j in range(5)})
+    #             for e,t,r in week_result:
+    #                 day = self.timeslots.get(t).get("day")
+    #                 hour = self.timeslots.get(t).get("hour")
+    #                 if self.rooms.get(r) == room:
+    #                     table["day "+ str(day)][hour].append(self.events.get(e).get("id")[0:7])
+    #                 elif t in self.rooms_busy.get(r):
+    #                     table["day "+ str(day)][hour].append("Busy")
+    #             print("Room {}\n {}".format(room,pd.DataFrame(table)))
 
 
 
@@ -294,16 +334,18 @@ class Model(pre.preprocess):
 if __name__ == '__main__':
     instance_data = data.Data("C:\\Users\\thom1\\OneDrive\\SDU\\8. semester\\Linear and integer programming\\Part 2\\01Project\\data_baby_ex")
     m = Model(instance_data.events,instance_data.slots,instance_data.banned,instance_data.rooms,instance_data.teachers,instance_data.students)
-    # result = m.events_to_time()
-    # final = m.matching_rooms(result)
-    # m.write_time_table_for_course(final[1],[course for course in m.courses])
-    # m.write_time_table_for_room(final[1],[room for room in m.rooms.values()])
-    result = m.CTT(1)
-    m.rooms_busy
-    m.timeslots.get(14)
-    m.write_time_table_for_course(result,[course for course in m.courses])
-    m.write_time_table_for_room(result,[room for room in m.rooms.values()])
-    m.events.get(2)
-    m.split_timeslots
-    m.split_timeslots
+    result = m.events_to_time()
+    final = m.matching_rooms(result)
+    m.write_time_table_for_course(final[1],[course for course in m.courses])
+    m.write_time_table_for_room(final[1],[room for room in m.rooms.values()])
+    # result = m.CTT(1)
+    # m.rooms_busy
+    # m.timeslots.get(14)
+    # m.write_time_table_for_course(result,[course for course in m.courses])
+    # m.write_time_table_for_room(result,[room for room in m.rooms.values()])
+    result
+    final
+    m.events.get(1)
+    m.periods.get(15)
+
     # %%
