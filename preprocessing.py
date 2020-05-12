@@ -8,15 +8,16 @@ class preprocess:
         self.banned = banned #Banned timeslots
         self.slots = slots #All timeslots
         self.teachers = teachers
+        self.period = 2
         self.weeks_end,self.weeks_begin = self.get_weeks() #The starting and ending week
         self.days = self.get_days() #The max number of days per week
         self.hours = self.get_hours() #The max number of hours per day
         self.timeslots = self.get_sorted_times() #dictionary of timeslots
-        self.split_timeslots = self.__get_time_week_day()
+        self.split_timeslots = self.__get_time_week_day() #dict mapping days and weeks to timeslots
+        self.split_periods = self.__get_sorted_periods()
         self.rooms,self.rooms_busy = self.get_rooms(rooms)
         self.rooms_at_t,self.rooms_at_t_count = self.get_rooms_at_t()
         self.banned_keys = self.get_banned_keys()
-        self.set_of_weeks = self.__get_time_week_day() # dict mapping days and weeks to timeslots
         self.events,self.courses = self.__get_events(events)
         self.teacher_conflict_graph = self.get_event_conflict(teachers)
         self.student_conflict_graph = self.get_event_conflict(students)
@@ -67,6 +68,11 @@ class preprocess:
         for index, time in enumerate(sorted(all,key = lambda k : (k['week'],k['day'],k['hour']))):
             temp[index] = time
         return temp
+
+
+    def __get_sorted_periods(self):
+        split_periods = {week:{day:self.__get_duration_sized_tuple(list_pair) for day,list_pair in day_dict.items()} for week,day_dict in self.split_timeslots.items()}
+        return split_periods
 
     #Returns list of keys corresponding to banned timeslots
     def get_banned_keys(self):
@@ -124,14 +130,21 @@ class preprocess:
             if value == val:
                 return key
         # print("Something went wrong with the _get_dict_key() method for value: {}".format(val))
+    #Get all elements in the list in duration sized tuples
+    def __get_duration_sized_tuple(self,list_to_subset):
+        return [[p for p in list_to_subset[i:i+self.period]] for i in range(0,len(list_to_subset),self.period)]
 
 
+
+    #Get all elements in the list paired
     def __all_pairings(self,list_to_pair: List):
-        list_of_pairs = []
-        for index,p1 in enumerate(list_to_pair):
-            for p2 in list_to_pair[index+1:]:
-                list_of_pairs.append((p1,p2))
+        list_of_pairs = [(p1,p2) for index,p1 in enumerate(list_to_pair) for p2 in list_to_pair[index+1:]]
+        # list_of_pairs = []
+        # for index,p1 in enumerate(list_to_pair):
+        #     for p2 in list_to_pair[index+1:]:
+        #         list_of_pairs.append((p1,p2))
         return list_of_pairs
+
 
     '''Could work for both students and teacher'''
     #Returns dict with week number as key and a list of event conflicts in terms of indexes for that week as value
@@ -177,8 +190,7 @@ class preprocess:
 if __name__ == '__main__':
     # instance_data = data.Data("C:\\Users\\thom1\\OneDrive\\SDU\\8. semester\\Linear and integer programming\\Part 2\\Material\\CTT\\data\\small")
     instance_data = data.Data("C:\\Users\\thom1\\OneDrive\\SDU\\8. semester\\Linear and integer programming\\Part 2\\01Project\\data_baby_ex")
-    instance = preprocess(instance_data.events,instance_data.slots,instance_data.banned,instance_data.rooms,instance_data.teachers)
-    instance.split_timeslots
-    instance.weeks_end
-
+    instance = preprocess(instance_data.events,instance_data.slots,instance_data.banned,instance_data.rooms,instance_data.teachers,instance_data.students)
     # %%
+    instance.split_timeslots.get('week 8').get("day 1")
+    instance.split_periods

@@ -167,8 +167,8 @@ class Model(pre.preprocess):
                         expr += sum(m.x[u,l,r]+m.x[v,l,r] for r in R for l in range(max(starting_index,t-self.events.get(u).get("duration")+1),t+1) if (u,l,r) in Index and (v,l,r) in Index)
             return expr
 
-        # m.obj=pe.Objective(rule=obj_rule,sense = pe.minimize)
-        m.obj=pe.Objective(expr = teacher_expr, sense = pe.minimize)
+        m.obj=pe.Objective(rule=obj_rule,sense = pe.minimize)
+        # m.obj=pe.Objective(expr = teacher_expr, sense = pe.minimize)
         # m.obj=pe.Objective(expr = 0, sense = pe.minimize)
 
         #All events must happen
@@ -212,7 +212,9 @@ class Model(pre.preprocess):
 
         solver = pyomo.opt.SolverFactory('glpk')
         results = solver.solve(m,tee=True)
-        # print("HERE: ",m.obj())
+        print("HERE: ",pe.value(m.obj))
+        for e in E:
+            print("HERE: ",pe.value(m.x[e,timeslots["day 4"][0],0]))
         return [(e,t,r) for e,t,r in Index if pe.value(m.x[e,t,r]) ==1]
     #Returns list of lists of results for each week
     def CTT(self,weeks: int):
@@ -220,7 +222,7 @@ class Model(pre.preprocess):
         for w in range(self.weeks_begin,self.weeks_begin+weeks):
             w=8
             print("Solves for week ",w)
-            result_list.append(self.CTT_week(super().get_events_this_week(w),self.set_of_weeks.get("week "+str(w)),w))
+            result_list.append(self.CTT_week(super().get_events_this_week(w),self.split_timeslots.get("week "+str(w)),w))
         return result_list
 
     def remove_var_close_to_banned(self,Index:List[Tuple[int,int,int]]):
@@ -241,7 +243,7 @@ class Model(pre.preprocess):
             if t in self.rooms_busy.get(r):
                 day = self.timeslots.get(t).get("day")
                 week = self.timeslots.get(t).get("week")
-                starting_index = self.set_of_weeks.get("week "+ str(week)).get("day "+str(day))[0]
+                starting_index = self.split_timeslots.get("week "+ str(week)).get("day "+str(day))[0]
                 for l in range(max(starting_index,t-self.events.get(e).get('duration')+1),t+1):
                     if (e,l,r) in Index_new:
                         Index_new.remove((e,l,r))
@@ -302,4 +304,6 @@ if __name__ == '__main__':
     m.write_time_table_for_course(result,[course for course in m.courses])
     m.write_time_table_for_room(result,[room for room in m.rooms.values()])
     m.events.get(2)
+    m.split_timeslots
+    m.split_timeslots
     # %%
