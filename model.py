@@ -77,43 +77,30 @@ class Model(pre.preprocess):
     def matching_rooms(self,result):
         m = pe.ConcreteModel()
 
-        # E_list = [event for week_result in result for event in week_result]
         E = {i:event for i,event in enumerate(result)}
         periods = set([event[1] for event in E.values()])
         periods = [self.periods.get(p) for p in periods]
-        print("p in ",periods)
-        print("E: ",E)
-        # consecutive_events = [(event1[0],event2[0]) for index,event1 in enumerate(E_list) for event2 in E_list[index+1:] if abs(event1[1]-event2[1])<=max(self.events.get(event1[0]).get("duration"),self.events.get(event2[0]).get("duration"))]
-        # print("Consec: ",consecutive_events)
+
         R_list = [(r,period) for r in self.rooms for period in periods if all(p not in self.rooms_busy.get(r) for p in period)]
         R = {i:room for i,room in enumerate(R_list)}
-        print("Rooms: ", R)
 
         A = [(i,j) for i,e in E.items() for j,room in R.items() if self.periods.get(e[1]) == room[1]]
-        print("A ",A)
-        # print([(self.events.get(E.get(i)[0]),self.rooms.get(R.get(j)[0])) for i,j in A])
 
         m.x = pe.Var(A,domain=pe.Binary)
         m.obj = pe.Objective(expr=1)
 
-        # def con_rule(m,r1,r2,i,ii):
-        #     # print("OUTSIDE: r:{}, i:{}, ii:{}".format(r,i,ii))
-        #     if (i,r1) in A and (ii,r2) in A:
-        #         return m.x[i,r1] + m.x[ii,r2] <=1
-        #     else:
-        #         return pe.Constraint.Skip
-        # m.consecutive_events= pe.Constraint(R.keys(),R.keys(),consecutive_events,rule=con_rule)
-
-
-        m.balance_constraints = pe.ConstraintList()
-        for j in R:
-            relvant_indexes = list(filter(lambda x:x[1]==j,A))
-            if any((i,j) in A for i,_ in relvant_indexes):
-                m.balance_constraints.add(sum(m.x[i,j] for i,_ in relvant_indexes)<=1)
-        for i in E:
-            relvant_indexes = list(filter(lambda x:x[0]==i,A))
-            if any((i,j) in A for _,j in relvant_indexes):
-                m.balance_constraints.add(sum(m.x[i,j] for _,j in relvant_indexes)==1)
+        m.room = pe.Constraint(R.keys(),rule=lambda m,r: sum(m.x[e,r] for e in E if (e,r) in A)<=1 if any((e,r) in A for e in E) else pe.Constraint.Skip)
+        m.event = pe.Constraint(E.keys(),rule=lambda m,e: sum(m.x[e,r] for r in R if (e,r) in A)==1 if any((e,r) in A for r in R) else pe.Constraint.Skip)
+        #
+        # m.balance_constraints = pe.ConstraintList()
+        # for j in R:
+        #     relvant_indexes = list(filter(lambda x:x[1]==j,A))
+        #     if any((i,j) in A for i,_ in relvant_indexes):
+        #         m.balance_constraints.add(sum(m.x[i,j] for i,_ in relvant_indexes)<=1)
+        # for i in E:
+        #     relvant_indexes = list(filter(lambda x:x[0]==i,A))
+        #     if any((i,j) in A for _,j in relvant_indexes):
+        #         m.balance_constraints.add(sum(m.x[i,j] for _,j in relvant_indexes)==1)
         solver = pyomo.opt.SolverFactory('glpk')
         results = solver.solve(m,tee=True)
 
