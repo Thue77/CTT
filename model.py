@@ -41,13 +41,8 @@ class Model(pre.preprocess):
         #         m.events_must_happen.add(sum(m.x[e,p] for _,p in list(filter(lambda x: e == x[0],Index)))==1)
 
         #Precedence constraints
-        # m.precedence = pe.ConstraintList()
-        # for w in range(self.weeks_begin,self.weeks_end+1):
-        #     starting_index = self.split_timeslots.get("week "+str(w)).get("day 0")[0]
-        #     for u,v in self.precedence_graph.get("week "+str(w)):
-        #         for t in T:
-        #             if any((u,l) in Index for l in range(starting_index,t)):
-        #                 m.precedence.add(sum(m.x[u,l]-m.x[v,l] for l in range(starting_index,t+1) if (v,l) in Index and (u,l) in Index) >= 0)
+        precedence = [[(e1,e2,p) for p in super(Model,self).get_periods_this_week(int(week[-1]))] for week,l in self.precedence_graph.items() for e1,e2 in l]
+        m.precedence = pe.Constraint(range(len(precedence)),rule=lambda m,i: sum(m.x[e1,p]-m.x[e2,p] for j in range(1,len(precedence[i])) for e1,e2,p in precedence[i][:j] if (e1,p) in Index and (e2,p) in Index)>=0)
 
         #No teacher conflicts
         A = super().conflict_graph_all_weeks(self.teacher_conflict_graph)
@@ -244,7 +239,6 @@ class Model(pre.preprocess):
                 if self.events.get(x[0]).get("id")[0:5] in courses:
                     day = self.periods.get(x[1])[0].get("day")
                     hour = self.periods.get(x[1])[0].get("hour")
-                    print("day: {}, hour: {}, event: {}".format(day,hour,self.events.get(x[0])))
                     for i in range(m.period):
                         table["day "+ str(day)][hour+i].append(self.events.get(x[0]).get("id")[0:7])
             print("Week {}\n {}".format(week,pd.DataFrame(table)))
@@ -265,8 +259,6 @@ class Model(pre.preprocess):
                     hour = self.periods.get(p)[0].get("hour")
                     for i in range(self.period):
                         table["day "+ str(day)][hour+i].append(self.events.get(e).get("id")[0:7])
-                    # elif t in self.rooms_busy.get(r):
-                    #     table["day "+ str(day)][hour].append("Busy")
                 print("Room {}\n {}".format(room,pd.DataFrame(table)))
 
 
@@ -277,7 +269,6 @@ if __name__ == '__main__':
     m = Model(instance_data.events,instance_data.slots,instance_data.banned,instance_data.rooms,instance_data.teachers,instance_data.students)
     result = m.events_to_time()
     final = m.matching_rooms(result)
-    m.get_periods_this_week(8)
     m.write_time_table_for_course(final[1],[course for course in m.courses])
     m.write_time_table_for_room(final[1],[room for room in m.rooms.values()])
     # %%
