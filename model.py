@@ -35,10 +35,6 @@ class Model(pre.preprocess):
         #Hard constraints
         #All events must happen
         m.events_must_happen = pe.Constraint(E,rule = lambda m,e: sum(m.x[e,p] for p in P if (e,p) in Index) ==1 if any((e,p) in Index for p in P) else pe.Constraint.Skip)
-        # m.events_must_happen = pe.ConstraintList()
-        # for e in E:
-        #     if any((e,p) in Index for _,p in list(filter(lambda x: e == x[0],Index))):
-        #         m.events_must_happen.add(sum(m.x[e,p] for _,p in list(filter(lambda x: e == x[0],Index)))==1)
 
         #Precedence constraints
         precedence = [[(e1,e2,p) for p in super(Model,self).get_periods_this_week(int(week[-1]))] for week,l in self.precedence_graph.items() for e1,e2 in l]
@@ -48,42 +44,51 @@ class Model(pre.preprocess):
         A = super().conflict_graph_all_weeks(self.teacher_conflict_graph)
         m.teacher_conflict = pe.Constraint(range(len(A)),rule=lambda m,i: sum(m.x[e,p] for e,p in A[i])<=1 if all((e,p) in Index for (e,p) in A[i]) else pe.Constraint.Skip)
 
+        #One event per course per day på student
+        # m.one_event_one_day = pe.ConstraintList()
+        # for w in range(self.weeks_begin,self.weeks_end+1):
+        #     week = "week "+str(w)
+        #     for d in range(self.days):
+        #         day = "day "+str(d)
+        #         for lists in self.student_events.get(week):
+        #             m.one_event_one_day.add(sum(m.x[e,p] for e in lists for p in self.split_periods.get(week).get(day) if (e,p) in Index)<=1)
+
+        # def one_event_one_day_rule(m,w,d,i):
+        #     week = "week "+str(w)
+        #     day = "day "+str(d)
+        #     return sum(m.x[e,p] for sets in self.student_events.get(week)[i] for e in sets for p in self.split_periods.get(week).get(day) if (e,p) in Index)<=1
+        # m.one_event_one_day = pe.Constraint(range(self.weeks_begin,self.weeks_end+1),range(5),[len(self.student_events.get("week "+str(w))) for w in range(self.weeks_begin,self.weeks_end+1)],rule=one_event_one_day_rule)
+
+
         #Ensure feasibility of the matching problem
         m.available_room = pe.ConstraintList()
         for p in self.periods:
-            if any((e,p) for e,_ in list(filter(lambda x: x[1] == p,Index))):
-                m.available_room.add(sum(m.x[e,p] for e,_ in list(filter(lambda x: x[1] == p,Index)))<= self.rooms_at_t_count.get(p))
-
-        # for t,time_dict in self.timeslots.items():
-        #     week = time_dict.get("week")
-        #     starting_index = self.split_timeslots.get("week "+str(week)).get("day 0")[0]
-        #     events = self.get_events_this_week(week)
-        #     if any((e,t) in Index for e in events):
-        #         m.available_room.add(sum(m.x[e,l] for e in events for l in range(max(starting_index,t-self.events.get(e).get("duration")+1),t+1) if (e,l) in Index)<=self.rooms_at_t_count.get(t))
-
-
+            if len([(e,p) in Index for e,_ in list(filter(lambda x: x[1] == p,Index))])!=0 and len([(e,p+1) for e,_ in list(filter(lambda x: x[1] == p,Index))])!=0:
+                m.available_room.add(sum(m.x[e,p+1] for e,_ in list(filter(lambda x: x[1] == p+1,Index)))+sum(m.x[e,p] for e,_ in list(filter(lambda x: x[1] == p,Index)))<= self.rooms_at_t_count.get(p))
         solver = pyomo.opt.SolverFactory('glpk')
         results = solver.solve(m,tee=True)
-        m.pprint()
+        # m.pprint()
         return [(e,t) for e,t in Index if pe.value(m.x[e,t]) ==1]
 
     def matching_rooms(self,result):
         m = pe.ConcreteModel()
-
+        print(result)
         E = {i:event for i,event in enumerate(result)}
         periods = set([event[1] for event in E.values()])
         periods = [self.periods.get(p) for p in periods]
         R_list = [(r,period) for r in self.rooms for period in periods if all(p not in self.rooms_busy.get(r) for p in period)]
         R = {i:room for i,room in enumerate(R_list)}
+        pairs = [(i,j) for i in range(len(R)-1) for j in range(i+1,len(R)) if abs(super(Model,self).get_dict_key(self.periods,R[i][1])-super(Model,self).get_dict_key(self.periods,R[j][1]))==1 and R[i][0]==R[j][0]]
+
 
         A = [(i,j) for i,e in E.items() for j,room in R.items() if self.periods.get(e[1]) == room[1]]
 
         m.x = pe.Var(A,domain=pe.Binary)
         m.obj = pe.Objective(expr=1)
-
+        #Constraints
         m.room = pe.Constraint(R.keys(),rule=lambda m,r: sum(m.x[e,r] for e in E if (e,r) in A)<=1 if any((e,r) in A for e in E) else pe.Constraint.Skip)
         m.event = pe.Constraint(E.keys(),rule=lambda m,e: sum(m.x[e,r] for r in R if (e,r) in A)==1 if any((e,r) in A for r in R) else pe.Constraint.Skip)
-
+        m.pairs = pe.Constraint(pairs,rule=lambda m,i,j: sum(m.x[e,j] for e,_ in list(filter(lambda x: x[1]==j,A))) + sum(m.x[e,i] for e,_ in list(filter(lambda x: x[1]==i,A)))<=1)
         solver = pyomo.opt.SolverFactory('glpk')
         results = solver.solve(m,tee=True)
 
@@ -93,17 +98,12 @@ class Model(pre.preprocess):
         elif results.solver.termination_condition == TerminationCondition.infeasible:
 
             print ("do something about it? or exit?")
-            return "Not Done",
+            return "Not Done"
         else:
             # something else is wrong
             print (str(results.solver))
 
 
-
-    def compatible_event_room(self,E,R):
-        print("R: ",R.items())
-        A = [(i,j) for i,e in E.items() for j,room in R.items() if e[1] == room[1]] #and self.rooms.get(room[0]) not in self.rooms_busy.get(room[0])]
-        return A
 
     ## Weekly model. Timeslots and events for one week
     def CTT_week(self,events:dict,timeslots:Dict[str,List[int]],week: int):
@@ -124,11 +124,11 @@ class Model(pre.preprocess):
 
 
         # #One event per day per course:
-        # m.one_event_one_day = pe.ConstraintList()
-        # for course_events in self.courses.values():
-        #     for day in timeslots.values():
-        #         if any((e,t,r) in Index for e in course_events for t in day for r in R):
-        #             m.one_event_one_day.add(sum(m.x[e,t,r] for e in course_events for t in day for r in R if (e,t,r) in Index)<=1)
+        m.one_event_one_day = pe.ConstraintList()
+        for course_events in self.courses.values():
+            for day in timeslots.values():
+                if any((e,t,r) in Index for e in course_events for t in day for r in R):
+                    m.one_event_one_day.add(sum(m.x[e,t,r] for e in course_events for t in day for r in R if (e,t,r) in Index)<=1)
 
         #
         def obj_rule(m):
@@ -199,29 +199,6 @@ class Model(pre.preprocess):
             result_list.append(self.CTT_week(super().get_events_this_week(w),self.split_timeslots.get("week "+str(w)),w))
         return result_list
 
-    def remove_var_close_to_banned(self,Index:List[Tuple[int,int,int]]):
-        Index_old = Index.copy()
-        Index_new = Index.copy()
-        for x in Index_old:
-            duration = self.events.get(x[0]).get("duration")
-            for t_banned in self.banned_keys:
-                if self.timeslots.get(x[1]).get("day") == self.timeslots.get(t_banned).get("day") and abs(t_banned-x[1]) < duration:
-                    Index_new.remove(x)
-                    break
-        return Index_new
-
-    def remove_busy_room(self, Index: List[Tuple[int,int,int]]):
-        Index_old = Index.copy()
-        Index_new = Index.copy()
-        for e,t,r in Index_old:
-            if t in self.rooms_busy.get(r):
-                day = self.timeslots.get(t).get("day")
-                week = self.timeslots.get(t).get("week")
-                starting_index = self.split_timeslots.get("week "+ str(week)).get("day "+str(day))[0]
-                for l in range(max(starting_index,t-self.events.get(e).get('duration')+1),t+1):
-                    if (e,l,r) in Index_new:
-                        Index_new.remove((e,l,r))
-        return Index_new
 
     #Prints weekly tables for given courses
     def write_time_table_for_course(self,result: List[List[Tuple[Union[int,int]]]],courses: Tuple[str]):

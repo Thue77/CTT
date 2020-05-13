@@ -19,6 +19,7 @@ class preprocess:
         self.rooms_at_t,self.rooms_at_t_count = self.get_rooms_at_t()
         self.banned_keys = self.get_banned_keys()
         self.events,self.courses = self.__get_events(events)
+        self.student_events = self.student_events(students)
         self.teacher_conflict_graph = self.get_event_conflict(teachers)
         self.student_conflict_graph = self.get_event_conflict(students)
         self.precedence_graph = self.__get_precedence_graph()
@@ -142,7 +143,7 @@ class preprocess:
         # print("Something went wrong with the _get_dict_key() method for value: {}".format(val))
     #Get all elements in the list in duration sized tuples
     def __get_duration_sized_tuple(self,list_to_subset):
-        return [[p for p in list_to_subset[i:i+self.period]] for i in range(0,len(list_to_subset),self.period)]
+        return [[p for p in list_to_subset[i:i+self.period]] for i in range(0,len(list_to_subset)-self.period)]
 
 
 
@@ -198,6 +199,16 @@ class preprocess:
                 precedence_graph["week "+str(event.get("week"))].append((index_arc,index))
         return precedence_graph
 
+    def student_events(self,students):
+        events = {"week "+str(w):set() for w in range(self.weeks_begin,self.weeks_end+1)}
+        for lists in students.values():
+            for dicts in lists:
+                week = "week "+str(dicts.get('week'))
+                courses = set([id[0:5] for id in dicts.get('events')])
+                for course in courses:
+                    events[week] |= set([frozenset([self.get_event_from_id(id) for id in dicts.get('events') if id[0:5] == course])])
+        return {week :[[e for e in subset] for subset in set] for week,set in events.items()}
+
 
 
 if __name__ == '__main__':
@@ -205,6 +216,12 @@ if __name__ == '__main__':
     instance_data = data.Data("C:\\Users\\thom1\\OneDrive\\SDU\\8. semester\\Linear and integer programming\\Part 2\\01Project\\data_baby_ex")
     instance = preprocess(instance_data.events,instance_data.slots,instance_data.banned,instance_data.rooms,instance_data.teachers,instance_data.students)
     # %%
+    instance.student_events
     instance.rooms_at_t_count
+    week = "week "+str(8)
+    day = "day "+str(0)
+    [(e,p) for sets in instance.student_events.get(week) for e in sets for p in instance.split_periods.get(week).get(day)]
+    instance.split_periods
+    instance.events
     instance.conflict_graph_all_weeks(instance.teacher_conflict_graph)
     instance.get_periods_this_week(8)
