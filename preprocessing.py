@@ -25,9 +25,9 @@ class preprocess:
 
     #Returns dict with time as key and a list of available rooms at that time, and length of lists
     def get_rooms_at_t(self):
-        R_t = {index:[r for r in self.rooms if set([self.get_dict_key(self.timeslots,p) for p in pair]).isdisjoint(set(self.rooms_busy.get(r)))] for index,pair in self.periods.items() }
-        R_t_len = {t:len(room_list) for t,room_list in R_t.items()}
-        return R_t,R_t_len
+        R_p = {index:[r for r in self.rooms if all(p not in self.rooms_busy.get(r) for p in pair)] for index,pair in self.periods.items() }
+        R_p_len = {p:len(room_list) for p,room_list in R_p.items()}
+        return R_p,R_p_len
 
 
     #Returns a dict with indexes mapping to rooms and a dict with room index mapping to list of busy timeslots
@@ -36,7 +36,7 @@ class preprocess:
         rooms_busy = {}
         for index,value in enumerate(rooms.values()):
             rooms_indexed[index] = value.get("id")
-            rooms_busy[index] = [self.get_dict_key(self.timeslots,time) for time in value.get("busy")]
+            rooms_busy[index] = [time for time in value.get("busy")]
         return rooms_indexed,rooms_busy
 
     #Get the starting and ending weeks
@@ -75,9 +75,14 @@ class preprocess:
         periods_old = self.__get_duration_sized_tuple(list(self.timeslots.values()))
         periods = {index:pair for index,pair in enumerate(periods_old) if pair[0].get('week')==pair[1].get('week') and pair[0].get('day')==pair[1].get('day')}
         split_periods = {week:{day:[] for day in ["day " + str(i) for i in range(self.days)]} for week in ["week " + str(i) for i in range(self.weeks_begin,self.weeks_end+1)]}
+        # split_periods = {week:[] for week in ["week " + str(i) for i in range(self.weeks_begin,self.weeks_end+1)]}
         for index,pair in periods.items():
             split_periods["week "+str(pair[0].get('week'))]["day "+str(pair[0].get('day'))].append(index) # This is okay. All should already be on same day in same week
+            # split_periods["week "+str(pair[0].get('week'))].extend(index) # This is okay. All should already be on same day in same week
         return periods,split_periods
+
+    def get_periods_this_week(self,week:int):
+        return [p for week,day_dict in self.split_periods.items() for sublist in day_dict.values() for p in sublist]
 
     #Returns list of keys corresponding to banned timeslots
     def get_banned_keys(self):
@@ -166,6 +171,9 @@ class preprocess:
             event_conflict[week_number] = self.__all_pairings(conflict_list)
         return event_conflict
 
+    def conflict_graph_all_weeks(self,conflict_graph):
+        return [[(e1,p),(e2,p)] for w in range(self.weeks_begin,self.weeks_end+1) for e1,e2 in conflict_graph.get('week '+str(w)) for p in self.get_periods_this_week(w)]
+
     #Returns dict week number as key and a list of course conflicts for that week as value
     def __get_course_conflict(self,participants):
         course_conflict = {"week "+ str(i):[] for i in range(self.weeks_begin,self.weeks_end+1)}
@@ -197,10 +205,6 @@ if __name__ == '__main__':
     instance_data = data.Data("C:\\Users\\thom1\\OneDrive\\SDU\\8. semester\\Linear and integer programming\\Part 2\\01Project\\data_baby_ex")
     instance = preprocess(instance_data.events,instance_data.slots,instance_data.banned,instance_data.rooms,instance_data.teachers,instance_data.students)
     # %%
-    instance.split_timeslots.get('week 8').get("day 1")
-    instance.rooms_at_t
-    instance.banned
-    instance.split_periods
-    instance.periods
-    instance.rooms
-    instance.rooms_busy
+    instance.rooms_at_t_count
+    instance.conflict_graph_all_weeks(instance.teacher_conflict_graph)
+    instance.get_periods_this_week(8)
