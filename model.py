@@ -19,28 +19,26 @@ class Model(pre.preprocess):
     #Only works when data is for one week
     def events_to_time(self,subset=[]):
         m = pe.ConcreteModel()
-        #Only include timeslots that are not banned
+        #Only include periods without that are not banned
         P = []
         for week in range(self.weeks_begin,self.weeks_end+1):
             for day,period_list in self.split_periods.get("week "+str(week)).items():
                 P.extend([p for p in period_list if all(time not in self.banned for time in self.periods.get(p))])
         E = [key for key in self.events]
-        print("E",E)
-        print("P",P)
         Index = [(e,p) for e in E for p in P]
-        #Remove unnecessary indexes
-        # Index = self.remove_var_close_to_banned(Index_old)
-
+        #Define variables
         m.x = pe.Var(Index, domain = pe.Binary)
+
+        #Define objective
         m.obj=pe.Objective(expr=1)
 
-
-
+        #Hard constraints
         #All events must happen
-        m.events_must_happen = pe.ConstraintList()
-        for e in E:
-            if any((e,p) in Index for _,p in list(filter(lambda x: e == x[0],Index))):
-                m.events_must_happen.add(sum(m.x[e,p] for _,p in list(filter(lambda x: e == x[0],Index)))==1)
+        m.events_must_happen = pe.Constraint(E,rule = lambda m,e: sum(m.x[e,p] for p in P if (e,p) in Index) ==1 if any((e,p) in Index for p in P) else pe.Constraint.Skip)
+        # m.events_must_happen = pe.ConstraintList()
+        # for e in E:
+        #     if any((e,p) in Index for _,p in list(filter(lambda x: e == x[0],Index))):
+        #         m.events_must_happen.add(sum(m.x[e,p] for _,p in list(filter(lambda x: e == x[0],Index)))==1)
 
         #Precedence constraints
         # m.precedence = pe.ConstraintList()
@@ -80,7 +78,6 @@ class Model(pre.preprocess):
         E = {i:event for i,event in enumerate(result)}
         periods = set([event[1] for event in E.values()])
         periods = [self.periods.get(p) for p in periods]
-
         R_list = [(r,period) for r in self.rooms for period in periods if all(p not in self.rooms_busy.get(r) for p in period)]
         R = {i:room for i,room in enumerate(R_list)}
 
@@ -91,16 +88,7 @@ class Model(pre.preprocess):
 
         m.room = pe.Constraint(R.keys(),rule=lambda m,r: sum(m.x[e,r] for e in E if (e,r) in A)<=1 if any((e,r) in A for e in E) else pe.Constraint.Skip)
         m.event = pe.Constraint(E.keys(),rule=lambda m,e: sum(m.x[e,r] for r in R if (e,r) in A)==1 if any((e,r) in A for r in R) else pe.Constraint.Skip)
-        #
-        # m.balance_constraints = pe.ConstraintList()
-        # for j in R:
-        #     relvant_indexes = list(filter(lambda x:x[1]==j,A))
-        #     if any((i,j) in A for i,_ in relvant_indexes):
-        #         m.balance_constraints.add(sum(m.x[i,j] for i,_ in relvant_indexes)<=1)
-        # for i in E:
-        #     relvant_indexes = list(filter(lambda x:x[0]==i,A))
-        #     if any((i,j) in A for _,j in relvant_indexes):
-        #         m.balance_constraints.add(sum(m.x[i,j] for _,j in relvant_indexes)==1)
+
         solver = pyomo.opt.SolverFactory('glpk')
         results = solver.solve(m,tee=True)
 
