@@ -338,14 +338,4 @@ if __name__ == '__main__':
     final = m.matching_rooms(result)
     m.write_time_table_for_course(final[1],[course for course in m.courses])
     m.write_time_table_for_room(final[1],[room for room in m.rooms.values()])
-    # result = m.CTT(1)
-    # m.rooms_busy
-    # m.timeslots.get(14)
-    # m.write_time_table_for_course(result,[course for course in m.courses])
-    # m.write_time_table_for_room(result,[room for room in m.rooms.values()])
-    result
-    final
-    m.events.get(1)
-    m.periods.get(15)
-
     # %%
