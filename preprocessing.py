@@ -74,14 +74,13 @@ class preprocess:
     '''Should not depend on the period being 2. Use all()'''
     def __get_sorted_periods(self):
         periods_old = self.__get_duration_sized_tuple(list(self.timeslots.values()))
-        periods = {index:pair for index,pair in enumerate(periods_old) if pair[0].get('week')==pair[1].get('week') and pair[0].get('day')==pair[1].get('day')}
+        periods = {index:pair for index,pair in enumerate(periods_old) if all(p not in self.banned for p in pair) and all(p1.get('week') == p2.get('week') and p1.get('day') == p2.get('day') for i,p1 in enumerate(pair) for p2 in pair[i+1:])}#pair[0].get('week')==pair[1].get('week') and pair[0].get('day')==pair[1].get('day')}
         split_periods = {week:{day:[] for day in ["day " + str(i) for i in range(self.days)]} for week in ["week " + str(i) for i in range(self.weeks_begin,self.weeks_end+1)]}
         # split_periods = {week:[] for week in ["week " + str(i) for i in range(self.weeks_begin,self.weeks_end+1)]}
         for index,pair in periods.items():
             split_periods["week "+str(pair[0].get('week'))]["day "+str(pair[0].get('day'))].append(index) # This is okay. All should already be on same day in same week
             # split_periods["week "+str(pair[0].get('week'))].extend(index) # This is okay. All should already be on same day in same week
         return periods,split_periods
-
     def get_periods_this_week(self,week:int):
         return [p for week,day_dict in self.split_periods.items() for sublist in day_dict.values() for p in sublist]
 
@@ -143,7 +142,7 @@ class preprocess:
         # print("Something went wrong with the _get_dict_key() method for value: {}".format(val))
     #Get all elements in the list in duration sized tuples
     def __get_duration_sized_tuple(self,list_to_subset):
-        return [[p for p in list_to_subset[i:i+self.period]] for i in range(0,len(list_to_subset)-self.period)]
+        return [[p for p in list_to_subset[i:i+self.period]] for i in range(0,len(list_to_subset)-self.period+1)]
 
 
 
@@ -173,7 +172,20 @@ class preprocess:
         return event_conflict
 
     def conflict_graph_all_weeks(self,conflict_graph):
-        return [[(e1,p),(e2,p)] for w in range(self.weeks_begin,self.weeks_end+1) for e1,e2 in conflict_graph.get('week '+str(w)) for p in self.get_periods_this_week(w)]
+        # same_period = [[(e1,p),(e2,p)] for w in range(self.weeks_begin,self.weeks_end+1) for e1,e2 in conflict_graph.get('week '+str(w)) for p in self.get_periods_this_week(w)]
+        # return [[(e1,p),(e2,p+1),(e1,p+1),(e2,p)] for w in range(self.weeks_begin,self.weeks_end+1) for e1,e2 in conflict_graph.get('week '+str(w)) for p in self.get_periods_this_week(w)[:-1]]
+        final = []
+        for week,day_dict in self.split_periods.items():
+            for period_list in day_dict.values():
+                for pair in conflict_graph.get(week):
+                    for period in period_list:
+                        temp = [(e,p) for e in pair for p in [period,period+1] if p in period_list]
+                        if len(final)==0:
+                            final.append(temp)
+                        elif not all(x in final[-1] for x in temp):
+                            final.append(temp)
+        return final#[[(e,p) for e in pair for p in [period,period-1] if p in period_list] for week,day_dict in self.split_periods.items() for period_list in day_dict.values() for pair in conflict_graph.get(week) for period in period_list]#[p1+same_period[i+1] if self.periods.get(p1[0][1])[0].get('day') == self.periods.get(same_period[i+1][0][1])[0].get('day') else p1 for i,p1 in enumerate(same_period[:-1])] #same_period#[[(e1,p1),(e2,p1)]+[(e1,p2),(e2,p2)] for w in range(self.weeks_begin,self.weeks_end+1) for e1,e2 in conflict_graph.get('week '+str(w)) for i,p1 in enumerate(self.get_periods_this_week(w)) for p2 in self.get_periods_this_week(w)[i+1:] if (self.periods.get(p1)[0].get('day')==self.periods.get(p2)[0].get('day'))]
+
 
     #Returns dict week number as key and a list of course conflicts for that week as value
     def __get_course_conflict(self,participants):
