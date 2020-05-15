@@ -163,29 +163,28 @@ class preprocess:
         event_conflict = {"week "+ str(i):[] for i in range(self.weeks_begin,self.weeks_end+1)}
         for week in range(self.weeks_begin,self.weeks_end+1):
             current_week = "week "+str(week)
-            for index,event_dict in self.get_events_this_week(week).items():
-                if event_dict.get("id")[0:5] in course_conflict.get(current_week):
-                    event_conflict[current_week].append(index)
+            for course_set in course_conflict.get(current_week):
+                temp = [index for index,event_dict in self.get_events_this_week(week).items() if event_dict.get("id")[0:5] in course_set]
+                event_conflict[current_week].append(temp)
+        return {week:[self.__all_pairings(conflict_list) for conflict_list in week_list] for week,week_list in event_conflict.items()}
 
-        for week_number,conflict_list in event_conflict.items():
-            event_conflict[week_number] = self.__all_pairings(conflict_list)
-        return event_conflict
+
 
     def conflict_graph_all_weeks(self,conflict_graph):
-        # same_period = [[(e1,p),(e2,p)] for w in range(self.weeks_begin,self.weeks_end+1) for e1,e2 in conflict_graph.get('week '+str(w)) for p in self.get_periods_this_week(w)]
-        # return [[(e1,p),(e2,p+1),(e1,p+1),(e2,p)] for w in range(self.weeks_begin,self.weeks_end+1) for e1,e2 in conflict_graph.get('week '+str(w)) for p in self.get_periods_this_week(w)[:-1]]
         final = []
         for week,day_dict in self.split_periods.items():
-            for period_list in day_dict.values():
-                for pair in conflict_graph.get(week):
-                    for period in period_list:
-                        temp = [(e,p) for e in pair for p in [period,period+1] if p in period_list]
-                        if len(final)==0:
-                            final.append(temp)
-                        elif not all(x in final[-1] for x in temp):
-                            final.append(temp)
-        return final#[[(e,p) for e in pair for p in [period,period-1] if p in period_list] for week,day_dict in self.split_periods.items() for period_list in day_dict.values() for pair in conflict_graph.get(week) for period in period_list]#[p1+same_period[i+1] if self.periods.get(p1[0][1])[0].get('day') == self.periods.get(same_period[i+1][0][1])[0].get('day') else p1 for i,p1 in enumerate(same_period[:-1])] #same_period#[[(e1,p1),(e2,p1)]+[(e1,p2),(e2,p2)] for w in range(self.weeks_begin,self.weeks_end+1) for e1,e2 in conflict_graph.get('week '+str(w)) for i,p1 in enumerate(self.get_periods_this_week(w)) for p2 in self.get_periods_this_week(w)[i+1:] if (self.periods.get(p1)[0].get('day')==self.periods.get(p2)[0].get('day'))]
+            for conflict_list in conflict_graph.get(week):
+                for pair in conflict_list:
+                    for day_list in day_dict.values():
+                        for period in day_list:
+                            final.append([(e,p) for e in pair for p in [period + i for i in range(self.period)] if p in day_list])
+        return final
 
+# instance.get_events_this_week(8)
+# instance.split_periods
+# instance.teacher_conflict_graph.get("week 8")
+#
+# instance.conflict_graph_all_weeks(instance.teacher_conflict_graph)
 
     #Returns dict week number as key and a list of course conflicts for that week as value
     def __get_course_conflict(self,participants):
@@ -193,10 +192,12 @@ class preprocess:
         for event_list in participants.values():
             for event_dict in event_list:
                 week = event_dict.get("week")
-                for id in event_dict.get("events"):
-                    if id[0:5] not in course_conflict.get("week "+str(week)):
-                        course_conflict.get("week "+str(week)).append(id[0:5])
+                if len(event_dict.get('events'))>0:
+                    temp = set([id[0:5] for id in event_dict.get('events')])
+                    if temp not in course_conflict.get("week "+str(week)):
+                        course_conflict.get("week "+str(week)).append(temp)
         return course_conflict
+
 
     def get_event_from_id(self,id):
         for key,value in self.events.items():
