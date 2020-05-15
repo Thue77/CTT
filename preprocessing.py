@@ -171,13 +171,18 @@ class preprocess:
 
 
     def conflict_graph_all_weeks(self,conflict_graph):
+        if len(conflict_graph)==0:
+            return []
         final = []
         for week,day_dict in self.split_periods.items():
             for conflict_list in conflict_graph.get(week):
                 for pair in conflict_list:
                     for day_list in day_dict.values():
                         for period in day_list:
-                            final.append([(e,p) for e in pair for p in [period + i for i in range(self.period)] if p in day_list])
+                            if len(final)==0:
+                                final.append([(e,p) for e in pair for p in [period + i for i in range(self.period)] if p in day_list])
+                            elif not all((e,p) in final[-1] for e in pair for p in [period + i for i in range(self.period)] if p in day_list):
+                                final.append([(e,p) for e in pair for p in [period + i for i in range(self.period)] if p in day_list])
         return final
 
 # instance.get_events_this_week(8)

@@ -16,30 +16,35 @@ class Model(pre.preprocess):
     def cut_and_solve(self):
         test = True
         subset = {"week "+str(w):[] for w in range(self.weeks_begin,self.weeks_end+1)}
+        #Cut teacher constraints
+        # while test:
+        #     result = self.events_to_time(subset)
+        #     test = False
+        #     for week,pair_list in self.teacher_conflict_graph.items():
+        #         for pairs in pair_list:
+        #             if any(abs(list(filter(lambda x:x[0]==e1,result))[0][1]-list(filter(lambda x:x[0]==e2,result))[0][1])<self.period for e1,e2 in pairs):
+        #                 subset[week].append(pairs)
+        #                 test = True
+        #                 break
+        #     print(subset)
+        #Cut precedence constraints:
         while test:
-            result = self.events_to_time(subset)
+            result = self.events_to_time(self.teacher_conflict_graph,subset)
             test = False
-            for week,pair_list in self.teacher_conflict_graph.items():
-                for pairs in pair_list:
-                    if any(abs(list(filter(lambda x:x[0]==e1,result))[0][1]-list(filter(lambda x:x[0]==e2,result))[0][1])<self.period for e1,e2 in pairs):
-                        subset[week].append(pairs)
+            for week,pair_list in self.precedence_graph.items():
+                for e1,e2 in pair_list:
+                    p1 = list(filter(lambda x:x[0]==e1,result))[0][1]; p2 = list(filter(lambda x:x[0]==e2,result))[0][1];
+                    if p1 > p2:
+                        subset[week].append((e1,e2))
                         test = True
                         break
-                    # for e1,e2 in pairs:
-                    #     p1 = list(filter(lambda x:x[0]==e1,result))[0][1]; p2 = list(filter(lambda x:x[0]==e2,result))[0][1];
-                    #     if abs(p1-p2)<self.period:
-                    #         # temp = [(e_1,e_2) for e_1,e_2 in list(filter(lambda x:x[0]==e1 or x[1] == e1,pair_list))+list(filter(lambda x:x[0]==e2 or x[1] == e2,pair_list))]
-                    #         # for e_1,e_2 in list(filter(lambda x:x[0]==e1 or x[1] == e1,pair_list))+list(filter(lambda x:x[0]==e2 or x[1] == e2,pair_list)):
-                    #         #     if ((e_1,e_2) not in subset[week] and (e_2,e_1) not in subset[week]):
-                    #         #         subset[week].append((e_1,e_2)) #add events to teacher conflict constraints
-                    #         # test = True
-                    #         break
             print(subset)
         return self.matching_rooms(result)
             # test = all(len(sublist)==0 for sublist in subset.values())
             # list(filter(lambda x: x[0]==1,[(1,2),(2,2),(3,5)]))[0]
             # m.teacher_conflict_graph
-# m.teacher_conflict_graph
+# m.precedence_graph
+
 
     #Only works when data is for one week
     def events_to_time(self,subset={},precedence_graph={}):
@@ -97,7 +102,7 @@ class Model(pre.preprocess):
 
         # m.precedence = pe.Constraint(range(len(precedence)),rule=lambda m,i: sum(m.x[e1,p]-m.x[e2,p] for j in range(1,len(precedence[i])) for e1,e2,p in precedence[i][:j] if (e1,p) in Index and (e2,p) in Index)>=0)
 
-m.precedence_graph
+# m.precedence_graph
 
         # #No teacher conflicts
         A = super().conflict_graph_all_weeks(subset)
@@ -120,9 +125,11 @@ m.precedence_graph
         for p in self.periods:
             if len([(e,p) in Index for e,_ in list(filter(lambda x: x[1] == p,Index))])!=0 and len([(e,p+1) for e,_ in list(filter(lambda x: x[1] == p,Index))])!=0:
                 m.available_room.add(sum(m.x[e,p+1] for e,_ in list(filter(lambda x: x[1] == p+1,Index)))+sum(m.x[e,p] for e,_ in list(filter(lambda x: x[1] == p,Index)))<= self.rooms_at_t_count.get(p))
+
+
         solver = pyomo.opt.SolverFactory('glpk')
-        results = solver.solve(m,tee=True)
-        # m.available_room.pprint()
+        results = solver.solve(m,tee=False)
+        # m.pprint()
         return [(e,t) for e,t in Index if pe.value(m.x[e,t]) ==1]
 
     def matching_rooms(self,result):
@@ -170,8 +177,12 @@ m.precedence_graph
                 table = {"Time":[(8+i,9+i) for i in range(self.hours+1)]}
                 temp = []
                 for room in self.rooms:
-                    if self.rooms_busy.get(room) not in temp: temp.extend(self.rooms_busy.get(room))
-                busy_or_banned = [time for time in temp + self.banned if not (time in temp and self.banned)]
+                    # print("room: ",room)
+                    for busy in self.rooms_busy.get(room):
+                        # print("busy: ",busy)
+                        if busy not in temp and all(busy in rooms_busy for rooms_busy in self.rooms_busy.values()): temp += [busy]
+                busy_or_banned = [time for time in temp + self.banned if not (time in temp and time in self.banned)]
+                # print(temp)
                 table.update({"day "+str(j):[["busy"] if {'day':j,'hour':i,'week':week} in busy_or_banned  else [] for i in range(self.hours+1)] for j in range(5)})
                 for x in week_result:
                     if self.events.get(x[0]).get("id")[0:5] in courses:
@@ -181,8 +192,10 @@ m.precedence_graph
                             table["day "+ str(day)][hour+i].append(self.events.get(x[0]).get("id")[0:7])
                 print("Week {}\n {}".format(week,pd.DataFrame(table)))
 
+# m.rooms_busy
+
     #Prints time tables for the rooms
-    def write_time_table_for_room(self,result: List[List[Tuple[Union[int,int,int]]]],rooms: Tuple[str],week_numbers:List[int]):
+    def write_time_table_for_room(self,result: List[List[Tuple[Union[int,int,int]]]],rooms: Tuple[str],week_numbers:[List[int]]):
         number_of_weeks = len(result)
         for w,week_result in enumerate(result):
             week = w + self.weeks_begin
@@ -191,7 +204,7 @@ m.precedence_graph
                     r = m.get_dict_key(self.rooms,room)
                     # Set up empty table indicating slots that are not available
                     table = {"Time":[(8+i,9+i) for i in range(self.hours+1)]}
-                    busy_or_banned = [time for time in self.rooms_busy.get(r) + self.banned if not (time in self.rooms_busy.get(r) and self.banned)]
+                    busy_or_banned = [time for time in self.rooms_busy.get(r) + self.banned if not (time in self.rooms_busy.get(r) and time in self.banned)]
                     table.update({"day "+str(j):[["busy"] if {'day':j,'hour':i,'week':week} in busy_or_banned  else [] for i in range(self.hours+1)] for j in range(5)})
                     for e,p,r in list(filter(lambda x: x[2] == r,week_result)):
                         day = self.periods.get(p)[0].get("day")
@@ -202,13 +215,20 @@ m.precedence_graph
 
 
 if __name__ == '__main__':
-    # instance_data = data.Data("C:\\Users\\thom1\\OneDrive\\SDU\\8. semester\\Linear and integer programming\\Part 2\\Material\\CTT\\data\\small")
-    instance_data = data.Data("C:\\Users\\thom1\\OneDrive\\SDU\\8. semester\\Linear and integer programming\\Part 2\\01Project\\data_baby_ex")
+    instance_data = data.Data("C:\\Users\\thom1\\OneDrive\\SDU\\8. semester\\Linear and integer programming\\Part 2\\Material\\CTT\\data\\small")
+    # instance_data = data.Data("C:\\Users\\thom1\\OneDrive\\SDU\\8. semester\\Linear and integer programming\\Part 2\\01Project\\data_baby_ex")
     m = Model(instance_data.events,instance_data.slots,instance_data.banned,instance_data.rooms,instance_data.teachers,instance_data.students)
-    result = m.events_to_time(m.teacher_conflict_graph)
-    final = m.matching_rooms(result)
-    # final = m.cut_and_solve()
+    # result = m.events_to_time(m.teacher_conflict_graph,precedence_graph = {})
+    # final = m.matching_rooms(result)
+    final = m.cut_and_solve()
     # %%
-    m.events
-    m.write_time_table_for_course(final[1],[course for course in m.courses],[8])
-    m.write_time_table_for_room(final[1],[room for room in m.rooms.values()],[6])
+    pd.set_option('display.max_rows', None)
+    pd.set_option('display.max_columns', None)
+    pd.set_option('display.width', None)
+    pd.set_option('display.max_colwidth', -1)
+    m.write_time_table_for_course(final[1],[course for course in m.courses],[w for w in range(m.weeks_begin,m.weeks_end+1)])
+    m.periods
+    m.rooms
+    m.rooms_busy
+
+    m.write_time_table_for_room(final[1],[room for room in m.rooms.values()],[w for w in range(m.weeks_begin,m.weeks_end+1)])
