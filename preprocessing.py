@@ -185,11 +185,6 @@ class preprocess:
                                 final.append([(e,p) for e in pair for p in [period + i for i in range(self.period)] if p in day_list])
         return final
 
-# instance.get_events_this_week(8)
-# instance.split_periods
-# instance.teacher_conflict_graph.get("week 8")
-#
-# instance.conflict_graph_all_weeks(instance.teacher_conflict_graph)
 
     #Returns dict week number as key and a list of course conflicts for that week as value
     def __get_course_conflict(self,participants):
@@ -233,9 +228,9 @@ if __name__ == '__main__':
     # instance_data = data.Data("C:\\Users\\thom1\\OneDrive\\SDU\\8. semester\\Linear and integer programming\\Part 2\\Material\\CTT\\data\\small")
     instance_data = data.Data("C:\\Users\\thom1\\OneDrive\\SDU\\8. semester\\Linear and integer programming\\Part 2\\01Project\\data_baby_ex")
     instance = preprocess(instance_data.events,instance_data.slots,instance_data.banned,instance_data.rooms,instance_data.teachers,instance_data.students)
-    instance.split_timeslots
-    instance.student_events
-    instance.events[1]
+    [t for sublist in instance.split_timeslots.get("week 8").values() for t in sublist]
+    instance.rooms_at_t_count
+    instance.get_events_this_week(8)
     # %%
     instance.student_events
     instance.rooms_at_t_count

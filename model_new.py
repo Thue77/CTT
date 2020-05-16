@@ -2,6 +2,7 @@ import pyomo
 import pyomo.opt
 import pyomo.environ as pe
 import pandas as pd
+import math
 import preprocessing as pre
 import data
 from typing import Dict,List,Tuple,Union
@@ -20,55 +21,57 @@ class Model(pre.preprocess):
             duration = self.events.get(x[0]).get("duration")
             day = self.timeslots.get(x[1]).get("day")
             week = self.timeslots.get(x[1]).get("week")
-            for t_banned in self.banned_keys:
-                if  day == self.timeslots.get(t_banned).get("day") and week == self.timeslots.get(t_banned).get("week") and  and abs(t_banned-x[1]) < duration:
+            last_key = self.split_timeslots.get('week '+str(week)).get('day '+str(day))[-1]
+            if last_key-x[1]<duration:
                     Index_new.remove(x)
-                    break
-            if self.split_timeslots.get('week '+str(w)).get('day '+str(d))[-1] not in self.banned_keys:
-
+            else:
+                for t_banned in self.banned_keys:
+                    if  day == self.timeslots.get(t_banned).get("day") and week == self.timeslots.get(t_banned).get("week") and t_banned-x[1] < duration and t_banned>x[1]:
+                        Index_new.remove(x)
+                        break
         return Index_new
 
     def matching_rooms(self,result):
         m = pe.ConcreteModel()
-        results = sorted(result,key=lambda x: x[1])
-        E = {}
-        R = {i:(r,t,d) for i,r,t,d in enumerate([(r,t,self.events[e].get('duration')) for e,t in results for r in self.rooms_busy if not any(self.timeslots[l] in self.rooms_busy for l in range(t,t+self.events[e].get('duration')))])}
-
-        # R = {i:x for i,x in enumerate(set([(r,t,m.events[e].get('duration')) for e,t in final[1] for r in m.rooms_busy if not any(m.timeslots.get(l) in m.rooms_busy.get(r) for l in range(t,t+m.events[e].get('duration')))]))}
-# R
-# final
-# m.rooms_busy
-# m.events[0]
-        for i,e,t in enumerate(results):
-            E[i] = (e,t)
-            d_e = self.events.get(e).get('duration')
-            for room in self.rooms:
-                pass
         E = {i:event for i,event in enumerate(result)}
-        periods = set([event[1] for event in E.values()])
-        periods = [self.periods.get(p) for p in periods]
-        R_list = [(r,period) for r in self.rooms for period in periods if all(p not in self.rooms_busy.get(r) for p in period)]
-        R = {i:room for i,room in enumerate(R_list)}
-        #Identify rooms with overlapping periods. Only one of such a pair of rooms may be chosen
-        pairs = [(i,j) for i in range(len(R)-1) for j in range(i+1,len(R)) if abs(super(Model,self).get_dict_key(self.periods,R[i][1])-super(Model,self).get_dict_key(self.periods,R[j][1]))==1 and R[i][0]==R[j][0]]
-
-        A = [(i,j) for i,e in E.items() for j,room in R.items() if self.periods.get(e[1]) == room[1]]
-
-        m.x = pe.Var(A,domain=pe.Binary)
+        R = {i:x for i,x in enumerate(set([(r,t,self.events[e].get('duration')) for e,t in result for r in self.rooms_busy if not any(self.timeslots.get(l) in self.rooms_busy.get(r) for l in range(t,t+self.events[e].get('duration')))]))}
+        I = [(i,j) for i,e in E.items() for j,r in R.items() if e[1]==r[1] and self.events[e[0]].get('duration') == r[2]]
+        #Find overlapping rooms
+        A_bar = []#[[i for i,room list(filter(lambda x:x[1][0]==r,R.items()))] for r in self.rooms]
+        for r in self.rooms:
+            list_for_r = sorted(list(filter(lambda x:x[1][0]==r,R.items())),key=lambda x: x[1][1])
+            Added = False
+            temp_1 = set()
+            for i,temp in enumerate(list_for_r[:-1]):
+                index = temp[0]
+                room = temp[1]
+                t = room[1]
+                duration = room[2]
+                if list_for_r[i+1][1][1]-t<duration:
+                    temp_1 |= {index,list_for_r[i+1][0]}
+                elif len(temp_1)>0:
+                    A_bar.append(temp_1)
+                    temp_1 = set()
+            if len(temp_1)>0:
+                A_bar.append(temp_1)
+        U_A = [item for subset in A_bar for item in subset]
+        m.x = pe.Var(I,domain=pe.Binary)
         m.obj = pe.Objective(expr=0)
         #Constraints
-        #Connections to rooms. Adds redundant constraints
-        m.room = pe.Constraint(R.keys(),rule=lambda m,r: sum(m.x[e,r] for e in E if (e,r) in A)<=1 if any((e,r) in A for e in E) else pe.Constraint.Skip)
-        #Connections to events
-        m.event = pe.Constraint(E.keys(),rule=lambda m,e: sum(m.x[e,r] for r in R if (e,r) in A)==1 if any((e,r) in A for r in R) else pe.Constraint.Skip)
+        #Cuts rooms.
+        m.room = pe.Constraint([r for r in R.keys() if r not in U_A],rule=lambda m,r: sum(m.x[e,r] for e,_ in list(filter(lambda x: x[1]==r,I)))<=1)
+        #Cuts for events
+        m.event = pe.Constraint(E.keys(),rule=lambda m,e: sum(m.x[e,r] for _,r in list(filter(lambda x:x[0]==e,I)))==1)
         #Only one edge for each pair of (r,p) vertices that have overlapping periods
-        m.pairs = pe.Constraint(pairs,rule=lambda m,i,j: sum(m.x[e,j] for e,_ in list(filter(lambda x: x[1]==j,A))) + sum(m.x[e,i] for e,_ in list(filter(lambda x: x[1]==i,A)))<=1)
+        m.overlap = pe.ConstraintList()
+        for A in A_bar:
+            m.overlap.add(sum(m.x[e,r] for r in A for e,_ in list(filter(lambda x: x[1]==r,I)))<=1)
         solver = pyomo.opt.SolverFactory('glpk')
         results = solver.solve(m,tee=False)
 
         if (results.solver.status == SolverStatus.ok) and (results.solver.termination_condition == TerminationCondition.optimal):
             print ("this is feasible and optimal")
-            return "Done",[[(*E.get(i),R.get(j)[0]) for i,j in A if pe.value(m.x[i,j]) ==1 and R.get(j)[1][0].get('week')==w] for w in range(self.weeks_begin,self.weeks_end+1)]
+            return "Done",[[(*E.get(i),R.get(j)[0]) for i,j in I if pe.value(m.x[i,j]) ==1 and self.timeslots[E.get(i)[1]].get('week')==w] for w in range(self.weeks_begin,self.weeks_end+1)]
         elif results.solver.termination_condition == TerminationCondition.infeasible:
             print ("do something about it? or exit?")
             return "Not Done"
@@ -93,11 +96,13 @@ class Model(pre.preprocess):
                 table.update({"day "+str(j):[["busy"] if {'day':j,'hour':i,'week':week} in busy_or_banned  else [] for i in range(self.hours+1)] for j in range(5)})
                 for x in week_result:
                     if self.events.get(x[0]).get("id")[0:5] in courses:
-                        day = self.periods.get(x[1])[0].get("day")
-                        hour = self.periods.get(x[1])[0].get("hour")
-                        for i in range(self.period):
+                        day = self.timeslots.get(x[1]).get("day")
+                        hour = self.timeslots.get(x[1]).get("hour")
+                        for i in range(self.events.get(x[0]).get('duration')):
                             table["day "+ str(day)][hour+i].append(self.events.get(x[0]).get("id")[0:7])
                 print("Week {}\n {}".format(week,pd.DataFrame(table)))
+
+
 
 
     #Prints time tables for the rooms
@@ -113,9 +118,9 @@ class Model(pre.preprocess):
                     busy_or_banned = [time for time in self.rooms_busy.get(r) + self.banned if not (time in self.rooms_busy.get(r) and time in self.banned)]
                     table.update({"day "+str(j):[["busy"] if {'day':j,'hour':i,'week':week} in busy_or_banned  else [] for i in range(self.hours+1)] for j in range(5)})
                     for e,p,r in list(filter(lambda x: x[2] == r,week_result)):
-                        day = self.periods.get(p)[0].get("day")
-                        hour = self.periods.get(p)[0].get("hour")
-                        for i in range(self.period):
+                        day = self.timeslots.get(p).get("day")
+                        hour = self.timeslots.get(p).get("hour")
+                        for i in range(self.events.get(e).get('duration')):
                             table["day "+ str(day)][hour+i].append(self.events.get(e).get("id")[0:7])
                     print("Week: {}, Room: {}\n {}".format(week,room,pd.DataFrame(table)))
     def CTT(self):
@@ -158,12 +163,11 @@ class Model(pre.preprocess):
         for i in range(self.weeks_begin,self.weeks_end+1):
             for j in range(self.days):
                 times = self.split_timeslots.get('week '+str(i)).get('day '+str(j))
-                for t in times[1:]:
+                for t in times:
                     start = times[0]
                     m.available_room.add(sum(sum(m.x[e,l] for l in range(max(start,t-self.events[e].get('duration')-1),t+1) if (e,l) in Index) for e in self.get_events_this_week(i))<= self.rooms_at_t_count[t])
 
 
-        m.available_room.pprint()
         solver = pyomo.opt.SolverFactory('glpk')
         results = solver.solve(m,tee=False)
 
@@ -186,5 +190,10 @@ if __name__ == '__main__':
     m = Model(instance_data.events,instance_data.slots,instance_data.banned,instance_data.rooms,instance_data.teachers,instance_data.students)
     m.split_timeslots
 
-    final = m.CTT()
+    result = m.CTT()
+    result
+    final = m.matching_rooms(result[1])
     final
+    # %%
+    m.write_time_table_for_course(final[1],[course for course in m.courses],[8])
+    m.write_time_table_for_room(final[1],[r for r in m.rooms.values()],[8])
