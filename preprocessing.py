@@ -26,9 +26,9 @@ class preprocess:
 
     #Returns dict with time as key and a list of available rooms at that time, and length of lists
     def get_rooms_at_t(self):
-        R_p = {index:[r for r in self.rooms if all(p not in self.rooms_busy.get(r) for p in pair)] for index,pair in self.periods.items() }
-        R_p_len = {p:len(room_list) for p,room_list in R_p.items()}
-        return R_p,R_p_len
+        R_t = {index:[r for r in self.rooms if t not in self.rooms_busy.get(r)] for index,t in self.timeslots.items()}
+        R_t_len = {p:len(room_list) for p,room_list in R_t.items()}
+        return R_t,R_t_len
 
 
     #Returns a dict with indexes mapping to rooms and a dict with room index mapping to list of busy timeslots
@@ -76,10 +76,8 @@ class preprocess:
         periods_old = self.__get_duration_sized_tuple(list(self.timeslots.values()))
         periods = {index:pair for index,pair in enumerate(periods_old) if all(p not in self.banned for p in pair) and all(p1.get('week') == p2.get('week') and p1.get('day') == p2.get('day') for i,p1 in enumerate(pair) for p2 in pair[i+1:])}#pair[0].get('week')==pair[1].get('week') and pair[0].get('day')==pair[1].get('day')}
         split_periods = {week:{day:[] for day in ["day " + str(i) for i in range(self.days)]} for week in ["week " + str(i) for i in range(self.weeks_begin,self.weeks_end+1)]}
-        # split_periods = {week:[] for week in ["week " + str(i) for i in range(self.weeks_begin,self.weeks_end+1)]}
         for index,pair in periods.items():
             split_periods["week "+str(pair[0].get('week'))]["day "+str(pair[0].get('day'))].append(index) # This is okay. All should already be on same day in same week
-            # split_periods["week "+str(pair[0].get('week'))].extend(index) # This is okay. All should already be on same day in same week
         return periods,split_periods
     def get_periods_this_week(self,week:int):
         return [p for week,day_dict in self.split_periods.items() for sublist in day_dict.values() for p in sublist]
@@ -100,8 +98,10 @@ class preprocess:
         for j,w in enumerate(names_week):
             dictionary[w] = {d: [] for d in names_day}
             for i,d in enumerate(names_day):
-                dictionary[w][d] = [key for (key,value) in self.timeslots.items() if value.get("week") == j+self.weeks_begin and value.get("day") == i]
+                dictionary[w][d] = [key for (key,value) in self.timeslots.items() if value.get("week") == j+self.weeks_begin and value.get("day") == i and value not in self.banned]
         return dictionary
+
+
 
     #Return dict of indexed events and a course dict with all indexes corresponding to each course
     def __get_events(self,events):
@@ -233,6 +233,9 @@ if __name__ == '__main__':
     # instance_data = data.Data("C:\\Users\\thom1\\OneDrive\\SDU\\8. semester\\Linear and integer programming\\Part 2\\Material\\CTT\\data\\small")
     instance_data = data.Data("C:\\Users\\thom1\\OneDrive\\SDU\\8. semester\\Linear and integer programming\\Part 2\\01Project\\data_baby_ex")
     instance = preprocess(instance_data.events,instance_data.slots,instance_data.banned,instance_data.rooms,instance_data.teachers,instance_data.students)
+    instance.split_timeslots
+    instance.student_events
+    instance.events[1]
     # %%
     instance.student_events
     instance.rooms_at_t_count

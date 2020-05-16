@@ -332,7 +332,7 @@ class Model(pre.preprocess):
             print("Iteration: ",counter)
             counter += 1
 
-        return self.matching_rooms(result)#self.matching_rooms([(e,t) for e,t in Index if pe.value(m.x[e,t]) ==1])
+        return self.matching_rooms(result)
 
 if __name__ == '__main__':
     # instance_data = data.Data("C:\\Users\\thom1\\OneDrive\\SDU\\8. semester\\Linear and integer programming\\Part 2\\Material\\CTT\\data\\small")
@@ -342,6 +342,8 @@ if __name__ == '__main__':
     # final = m.matching_rooms(result)
     # final = m.cut_and_solve()
     final = m.CTT()
+
+# m.conflict_graph_all_weeks(m.teacher_conflict_graph)
 
     # %%
     m.events[8]
