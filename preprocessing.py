@@ -8,13 +8,11 @@ class preprocess:
         self.banned = banned #Banned timeslots
         self.slots = slots #All timeslots
         self.teachers = teachers
-        self.period = 2
         self.weeks_end,self.weeks_begin = self.get_weeks() #The starting and ending week
         self.days = self.get_days() #The max number of days per week
         self.hours = self.get_hours() #The max number of hours per day
         self.timeslots = self.get_sorted_times() #dictionary of timeslots
         self.split_timeslots = self.__get_time_week_day() #dict mapping days and weeks to timeslots
-        self.periods,self.split_periods = self.__get_sorted_periods()
         self.rooms,self.rooms_busy = self.get_rooms(rooms)
         self.rooms_at_t,self.rooms_at_t_count = self.get_rooms_at_t()
         self.banned_keys = self.get_banned_keys()
@@ -71,17 +69,6 @@ class preprocess:
             temp[index] = time
         return temp
 
-    '''Should not depend on the period being 2. Use all()'''
-    def __get_sorted_periods(self):
-        periods_old = self.__get_duration_sized_tuple(list(self.timeslots.values()))
-        periods = {index:pair for index,pair in enumerate(periods_old) if all(p not in self.banned for p in pair) and all(p1.get('week') == p2.get('week') and p1.get('day') == p2.get('day') for i,p1 in enumerate(pair) for p2 in pair[i+1:])}#pair[0].get('week')==pair[1].get('week') and pair[0].get('day')==pair[1].get('day')}
-        split_periods = {week:{day:[] for day in ["day " + str(i) for i in range(self.days)]} for week in ["week " + str(i) for i in range(self.weeks_begin,self.weeks_end+1)]}
-        for index,pair in periods.items():
-            split_periods["week "+str(pair[0].get('week'))]["day "+str(pair[0].get('day'))].append(index) # This is okay. All should already be on same day in same week
-        return periods,split_periods
-    def get_periods_this_week(self,week:int):
-        return [p for week,day_dict in self.split_periods.items() for sublist in day_dict.values() for p in sublist]
-
     #Returns list of keys corresponding to banned timeslots
     def get_banned_keys(self):
         key_list = []
@@ -100,7 +87,6 @@ class preprocess:
             for i,d in enumerate(names_day):
                 dictionary[w][d] = [key for (key,value) in self.timeslots.items() if value.get("week") == j+self.weeks_begin and value.get("day") == i and value not in self.banned]
         return dictionary
-
 
 
     #Return dict of indexed events and a course dict with all indexes corresponding to each course
@@ -139,24 +125,9 @@ class preprocess:
         for key,value in dictionary.items():
             if value == val:
                 return key
-        # print("Something went wrong with the _get_dict_key() method for value: {}".format(val))
-    #Get all elements in the list in duration sized tuples
-    def __get_duration_sized_tuple(self,list_to_subset):
-        return [[p for p in list_to_subset[i:i+self.period]] for i in range(0,len(list_to_subset)-self.period+1)]
 
 
-
-    #Get all elements in the list paired
-    def __all_pairings(self,list_to_pair: List):
-        list_of_pairs = [(p1,p2) for index,p1 in enumerate(list_to_pair) for p2 in list_to_pair[index+1:]]
-        # list_of_pairs = []
-        # for index,p1 in enumerate(list_to_pair):
-        #     for p2 in list_to_pair[index+1:]:
-        #         list_of_pairs.append((p1,p2))
-        return list_of_pairs
-
-
-    '''Could work for both students and teacher'''
+    '''Could work for both students and teacher''' #Allow TE classes to overlap for students!!!
     #Returns dict with week number as key and a list of event conflicts in terms of indexes for that week as value
     def get_event_conflict(self,participants):
         course_conflict = self.__get_course_conflict(participants)
@@ -167,24 +138,8 @@ class preprocess:
             for course_set in course_conflict.get(current_week):
                 temp = [index for index,event_dict in self.get_events_this_week(week).items() if event_dict.get("id")[0:5] in course_set]
                 event_conflict[current_week].append(temp)
-        return event_conflict#{week:[self.__all_pairings(conflict_list) for conflict_list in week_list] for week,week_list in event_conflict.items()}
+        return event_conflict
 
-
-    def conflict_graph_all_weeks(self,conflict_graph):
-        if len(conflict_graph)==0:
-            return []
-        # print(conflict_graph)
-        final = []
-        for week,day_dict in self.split_timeslots.items():
-            for conflict_list in conflict_graph.get(week):
-                for pair in conflict_list:
-                    for day_list in day_dict.values():
-                        for period in day_list:
-                            if len(final)==0:
-                                final.append([(e,p) for e in pair for p in [period + i for i in range(self.period)] if p in day_list])
-                            elif not all((e,p) in final[-1] for e in pair for p in [period + i for i in range(self.period)] if p in day_list):
-                                final.append([(e,p) for e in pair for p in [period + i for i in range(self.period)] if p in day_list])
-        return final
 
 
     #Returns dict week number as key and a list of course conflicts for that week as value
@@ -198,7 +153,6 @@ class preprocess:
                     if temp not in course_conflict.get("week "+str(week)):
                         course_conflict.get("week "+str(week)).append(temp)
         return course_conflict
-
 
     def get_event_from_id(self,id):
         for key,value in self.events.items():
@@ -237,8 +191,4 @@ if __name__ == '__main__':
     instance.rooms_at_t_count
     week = "week "+str(8)
     day = "day "+str(0)
-    [(e,p) for sets in instance.student_events.get(week) for e in sets for p in instance.split_periods.get(week).get(day)]
-    instance.split_periods
     instance.events
-    instance.conflict_graph_all_weeks(instance.teacher_conflict_graph)
-    instance.get_periods_this_week(8)

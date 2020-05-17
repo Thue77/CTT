@@ -7,6 +7,7 @@ import preprocessing as pre
 import data
 from typing import Dict,List,Tuple,Union
 from pyomo.opt import SolverStatus, TerminationCondition
+import csv
 
 
 class Model(pre.preprocess):
@@ -37,7 +38,7 @@ class Model(pre.preprocess):
         R = {i:x for i,x in enumerate(set([(r,t,self.events[e].get('duration')) for e,t in result for r in self.rooms_busy if not any(self.timeslots.get(l) in self.rooms_busy.get(r) for l in range(t,t+self.events[e].get('duration')))]))}
         I = [(i,j) for i,e in E.items() for j,r in R.items() if e[1]==r[1] and self.events[e[0]].get('duration') == r[2]]
         #Find overlapping rooms
-        A_bar = []#[[i for i,room list(filter(lambda x:x[1][0]==r,R.items()))] for r in self.rooms]
+        A_bar = []
         for r in self.rooms:
             list_for_r = sorted(list(filter(lambda x:x[1][0]==r,R.items())),key=lambda x: x[1][1])
             Added = False
@@ -83,6 +84,7 @@ class Model(pre.preprocess):
     #Prints weekly tables for given courses
     def write_time_table_for_course(self,result: List[List[Tuple[Union[int,int]]]],courses: Tuple[str],week_numbers: List[int]):
         number_of_weeks = len(result)
+        df_dict = {} #List of data frames
         for w,week_result in enumerate(result):
             week = w + self.weeks_begin
             if week in week_numbers:
@@ -100,19 +102,19 @@ class Model(pre.preprocess):
                         hour = self.timeslots.get(x[1]).get("hour")
                         for i in range(self.events.get(x[0]).get('duration')):
                             table["day "+ str(day)][hour+i].append(self.events.get(x[0]).get("id")[0:7])
-                print("Week {}\n {}".format(week,pd.DataFrame(table)))
-
-
+                df_dict["Week "+str(week)] = pd.DataFrame(table)
+        return df_dict
 
 
     #Prints time tables for the rooms
     def write_time_table_for_room(self,result: List[List[Tuple[Union[int,int,int]]]],rooms: Tuple[str],week_numbers:[List[int]]):
         number_of_weeks = len(result)
+        df_dict = {"Week "+str(w):{} for w in range(self.weeks_begin,self.weeks_end+1)}
         for w,week_result in enumerate(result):
             week = w + self.weeks_begin
             if week in week_numbers:
                 for room in rooms:
-                    r = m.get_dict_key(self.rooms,room)
+                    r = self.get_dict_key(self.rooms,room)
                     # Set up empty table indicating slots that are not available
                     table = {"Time":[(8+i,9+i) for i in range(self.hours+1)]}
                     busy_or_banned = [time for time in self.rooms_busy.get(r) + self.banned if not (time in self.rooms_busy.get(r) and time in self.banned)]
@@ -122,10 +124,13 @@ class Model(pre.preprocess):
                         hour = self.timeslots.get(p).get("hour")
                         for i in range(self.events.get(e).get('duration')):
                             table["day "+ str(day)][hour+i].append(self.events.get(e).get("id")[0:7])
-                    print("Week: {}, Room: {}\n {}".format(week,room,pd.DataFrame(table)))
+                    # print("Week: {}, Room: {}\n {}".format(week,room,pd.DataFrame(table)))
+                    df_dict["Week "+str(week)]["Room " + room] = pd.DataFrame(table)
+        return df_dict
+
+
     def CTT(self):
         m = pe.ConcreteModel()
-        #Only include periods without that are not banned
         T = []
         E = []
         Index_old = []
@@ -136,11 +141,28 @@ class Model(pre.preprocess):
             E.append([key for key in self.get_events_this_week(week)])
             Index_old += [(e,t) for e in E[-1] for t in T[-1]]
         Index = self.remove_var_close_to_banned(Index_old)
+        #Index for auxillary variables:
+        temp = [(c,t) for week,day_dict in self.split_timeslots.items() for c in self.student_conflict_graph.get(week) for t in [t for sublist in day_dict.values() for t in sublist]]
+        I = {i:item for i,item in enumerate(temp)}
+
+
         #Define variables
         m.x = pe.Var(Index, domain = pe.Binary)
+        m.w = pe.Var(I.keys(),domain = pe.NonNegativeIntegers)
+
+        #Soft constraints
+        m.student_overlap = pe.ConstraintList()
+        for i,c_t in I.items():
+            C = c_t[0]; t = c_t[1];
+            week = 'week '+ str(self.timeslots.get(t).get('week')); day = 'day '+ str(self.timeslots.get(t).get('day'))
+            start = self.split_timeslots.get(week).get(day)[0]
+            if any((e,l) in Index for e in C for l in range(max(start,t-self.events.get(e).get('duration')+1),t+1)):
+                total_event = sum([self.events.get(e).get('duration') for e in C])
+                m.student_overlap.add(sum(m.x[e,l]for e in C for l in range(max(start,t-self.events.get(e).get('duration')+1),t+1) if (e,l) in Index)-1<=m.w[i])
 
         #Define objective
-        m.obj=pe.Objective(expr=0)
+        m.obj=pe.Objective(expr=sum(m.w[i] for i in I))
+        # m.obj = pe.Objective(expr=0)
 
         #Hard constraints
         #All events must happen
@@ -158,7 +180,6 @@ class Model(pre.preprocess):
                 for D in W_s.values():
                     if any((e,t) for e in S for _,t in list(filter(lambda x: x[0]==e and x[1] in D,Index))):
                         m.one_event_one_day.add(sum(m.x[e,t] for e in S for _,t in list(filter(lambda x: x[0]==e and x[1] in D,Index)))<=1)
-        # m.one_event_one_day.pprint()
 
         m.precedence = pe.ConstraintList()
         precedence = {week: [[[(e1,e2,t) for t in day_list] for day_list in list(self.split_timeslots.get(week).values())[:-1]] for e1,e2 in l] for week,l in self.precedence_graph.items()}
@@ -179,6 +200,7 @@ class Model(pre.preprocess):
         # m.pprint()
         solver = pyomo.opt.SolverFactory('glpk')
         test = True
+        count = 0
         while test:
             test = False
             results = solver.solve(m,tee=False)
@@ -194,8 +216,7 @@ class Model(pre.preprocess):
                     times = sorted([(e,t) for e in event_list for _,t in list(filter(lambda x:x[0]==e,result))],key=lambda x:x[1])
                     if any(x[1]+self.events[x[0]].get('duration')-1>=t2 for i,x in enumerate(times[:-1]) for e2,t2 in times[i+1:]):
                         subset_teacher[week].append([e for e,t in times])
-                        print("Teacher")
-                        # print("Subset: ",subset_teacher)
+                        # print("Teacher")
                         test = True
                         break
             #Cuts for rooms
@@ -208,7 +229,7 @@ class Model(pre.preprocess):
                 if subset_room.get(t)==None and count>self.rooms_at_t_count.get(t):
                     day = 'day '+str(self.timeslots.get(t).get('day'))
                     subset_room[week] = day
-                    print("Room")
+                    # print("Room")
                     test = True
 
             #Add Cuts
@@ -216,7 +237,6 @@ class Model(pre.preprocess):
             for week,C_bar in subset_teacher.items():
                 W_C =  self.split_timeslots.get(week).values()
                 for C in C_bar:
-                    # print("C: ",C)
                     for D in W_C:
                         for t in D:
                             start = D[0]
@@ -229,10 +249,13 @@ class Model(pre.preprocess):
                     start = times[0]
                     if sum([(e,l) in Index for e in self.get_events_this_week(int(week[5:])) for l in range(max(start,t-self.events[e].get('duration')+1),t+1)])>self.rooms_at_t_count[t]:
                         m.available_room.add(sum(m.x[e,l] for e in self.get_events_this_week(int(week[5:])) for l in range(max(start,t-self.events[e].get('duration')+1),t+1) if (e,l) in Index)<= self.rooms_at_t_count[t])
+            print('Iteration: ',count)
+            count+=1
 
-
+        # m.w.pprint()
         if (results.solver.status == SolverStatus.ok) and (results.solver.termination_condition == TerminationCondition.optimal):
             print ("this is feasible and optimal")
+            print("Objective: ",pe.value(m.obj))
             return self.matching_rooms(result)
         elif results.solver.termination_condition == TerminationCondition.infeasible:
             print ("Infeasible")
@@ -250,7 +273,6 @@ if __name__ == '__main__':
     instance_data = data.Data("C:\\Users\\thom1\\OneDrive\\SDU\\8. semester\\Linear and integer programming\\Part 2\\01Project\\data_baby_ex")
     m = Model(instance_data.events,instance_data.slots,instance_data.banned,instance_data.rooms,instance_data.teachers,instance_data.students)
     final = m.CTT()
-    final
     # %%
-    m.write_time_table_for_course(final[1],[course for course in m.courses],[8,9])
-    m.write_time_table_for_room(final[1],[r for r in m.rooms.values()],[9])
+    week_dict = m.write_time_table_for_course(final[1],[course for course in m.courses],[8,9])
+    room_dict = m.write_time_table_for_room(final[1],[r for r in m.rooms.values()],[8,9])
