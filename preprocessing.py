@@ -160,21 +160,22 @@ class preprocess:
     #Returns dict with week number as key and a list of event conflicts in terms of indexes for that week as value
     def get_event_conflict(self,participants):
         course_conflict = self.__get_course_conflict(participants)
+        # print(course_conflict)
         event_conflict = {"week "+ str(i):[] for i in range(self.weeks_begin,self.weeks_end+1)}
         for week in range(self.weeks_begin,self.weeks_end+1):
             current_week = "week "+str(week)
             for course_set in course_conflict.get(current_week):
                 temp = [index for index,event_dict in self.get_events_this_week(week).items() if event_dict.get("id")[0:5] in course_set]
                 event_conflict[current_week].append(temp)
-        return {week:[self.__all_pairings(conflict_list) for conflict_list in week_list] for week,week_list in event_conflict.items()}
-
+        return event_conflict#{week:[self.__all_pairings(conflict_list) for conflict_list in week_list] for week,week_list in event_conflict.items()}
 
 
     def conflict_graph_all_weeks(self,conflict_graph):
         if len(conflict_graph)==0:
             return []
+        # print(conflict_graph)
         final = []
-        for week,day_dict in self.split_periods.items():
+        for week,day_dict in self.split_timeslots.items():
             for conflict_list in conflict_graph.get(week):
                 for pair in conflict_list:
                     for day_list in day_dict.values():
@@ -223,13 +224,13 @@ class preprocess:
         return {week :[[e for e in subset] for subset in set] for week,set in events.items()}
 
 
-
 if __name__ == '__main__':
-    # instance_data = data.Data("C:\\Users\\thom1\\OneDrive\\SDU\\8. semester\\Linear and integer programming\\Part 2\\Material\\CTT\\data\\small")
-    instance_data = data.Data("C:\\Users\\thom1\\OneDrive\\SDU\\8. semester\\Linear and integer programming\\Part 2\\01Project\\data_baby_ex")
+    instance_data = data.Data("C:\\Users\\thom1\\OneDrive\\SDU\\8. semester\\Linear and integer programming\\Part 2\\Material\\CTT\\data\\small")
+    # instance_data = data.Data("C:\\Users\\thom1\\OneDrive\\SDU\\8. semester\\Linear and integer programming\\Part 2\\01Project\\data_baby_ex")
     instance = preprocess(instance_data.events,instance_data.slots,instance_data.banned,instance_data.rooms,instance_data.teachers,instance_data.students)
     [t for sublist in instance.split_timeslots.get("week 8").values() for t in sublist]
-    instance.rooms_at_t_count
+    instance.rooms_at_t_count[240]
+    instance.split_timeslots.get('week 10')
     instance.get_events_this_week(8)
     # %%
     instance.student_events
