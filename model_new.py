@@ -171,24 +171,10 @@ class Model(pre.preprocess):
 
         #Teacher-conflict constraints:
         m.teacher_conflict = pe.ConstraintList()
-        # for week,C_bar in self.teacher_conflict_graph.items():
-        #     W_C =  self.split_timeslots.get(week).values()
-        #     for C in C_bar:
-        #         for D in W_C:
-        #             start = D[0]
-        #             for t in D:
-        #                 if any((e,l) in Index for e in C for l in range(max(start,t-self.events.get(e).get('duration')+1),t+1)):
-        #                     m.teacher_conflict.add(sum(sum(m.x[e,l] for l in range(max(start,t-self.events.get(e).get('duration')+1),t+1) if (e,l) in Index) for e in C)<=1)
 
 
         #Ensure feasibility of the matching problem
         m.available_room = pe.ConstraintList()
-        # for i in range(self.weeks_begin,self.weeks_end+1):
-        #     for j in range(self.days):
-        #         times = self.split_timeslots.get('week '+str(i)).get('day '+str(j))
-        #         for t in times:
-        #             start = times[0]
-        #             m.available_room.add(sum(sum(m.x[e,l] for l in range(max(start,t-self.events[e].get('duration')+1),t+1) if (e,l) in Index) for e in self.get_events_this_week(i))<= self.rooms_at_t_count[t])
 
         # m.pprint()
         solver = pyomo.opt.SolverFactory('glpk')
@@ -197,9 +183,7 @@ class Model(pre.preprocess):
             test = False
             results = solver.solve(m,tee=False)
             result = [(e,t) for e,t in Index if pe.value(m.x[e,t]) ==1]
-            # final = self.matching_rooms(result)
-            # self.write_time_table_for_course(final[1],[course for course in self.courses],[8,9])
-            # self.write_time_table_for_room(final[1],[r for r in self.rooms.values()],[8])
+
 
             #Find teacher and room conflicts
             subset_room = {} #Dict of weeks and days for which there at some time is too many rooms
@@ -226,7 +210,6 @@ class Model(pre.preprocess):
                     subset_room[week] = day
                     print("Room")
                     test = True
-            # print('Subset for room',subset_room)
 
             #Add Cuts
             #Teacher
@@ -259,9 +242,7 @@ class Model(pre.preprocess):
             print (str(results.solver))
 
 
-# m.split_timeslots
 
-# m.events[0]
 
 
 if __name__ == '__main__':
