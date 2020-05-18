@@ -166,13 +166,8 @@ if __name__ == '__main__':
     instance_data = data.Data("C:\\Users\\thom1\\OneDrive\\SDU\\8. semester\\Linear and integer programming\\Part 2\\Material\\CTT\\data\\small")
     # instance_data = data.Data("C:\\Users\\thom1\\OneDrive\\SDU\\8. semester\\Linear and integer programming\\Part 2\\01Project\\data_baby_ex")
     instance = preprocess(instance_data.events,instance_data.slots,instance_data.banned,instance_data.rooms,instance_data.teachers,instance_data.students)
-    [t for sublist in instance.split_timeslots.get("week 8").values() for t in sublist]
-    instance.rooms_at_t_count[240]
-    instance.split_timeslots.get('week 10')
-    instance.teacher_conflict_graph == instance.get_conflict_graph(instance.teachers)
-
-
     # %%
+    instance.teacher_conflict_graph
     instance.student_events
     instance.rooms_at_t_count
     week = "week "+str(8)
