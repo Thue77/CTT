@@ -167,7 +167,6 @@ class Model(pre.preprocess):
             C = c_t[0]; day = c_t[1]; week = c_t[2];
             m.teacher_duties.add(sum(m.x[e,t] for e in C for t in self.split_timeslots.get(week).get(day) if (e,t) in Index)-1 <= m.y[i])
 
-        m.teacher_duties.pprint()
 
         #Define objective
         m.obj=pe.Objective(expr=0.5*sum(m.w[i] for i in I_student)+0.5*sum(m.y[i] for i in I_teacher))
