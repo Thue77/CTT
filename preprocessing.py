@@ -18,8 +18,8 @@ class preprocess:
         self.banned_keys = self.get_banned_keys()
         self.events,self.courses = self.__get_events(events)
         self.student_events = self.student_events(students)
-        self.teacher_conflict_graph = self.get_event_conflict(teachers)
-        self.student_conflict_graph = self.get_event_conflict(students)
+        self.teacher_conflict_graph = self.get_conflict_graph(teachers)
+        self.student_conflict_graph = self.get_conflict_graph(students)
         self.precedence_graph = self.__get_precedence_graph()
 
     #Returns dict with time as key and a list of available rooms at that time, and length of lists
@@ -126,33 +126,17 @@ class preprocess:
             if value == val:
                 return key
 
-
-    '''Could work for both students and teacher''' #Allow TE classes to overlap for students!!!
-    #Returns dict with week number as key and a list of event conflicts in terms of indexes for that week as value
-    def get_event_conflict(self,participants):
-        course_conflict = self.__get_course_conflict(participants)
-        # print(course_conflict)
+    #Returns dict with week number(str) as key and a List of lists of event conflicts in terms of indexes for that week as value
+    def get_conflict_graph(self,participants):
         event_conflict = {"week "+ str(i):[] for i in range(self.weeks_begin,self.weeks_end+1)}
-        for week in range(self.weeks_begin,self.weeks_end+1):
-            current_week = "week "+str(week)
-            for course_set in course_conflict.get(current_week):
-                temp = [index for index,event_dict in self.get_events_this_week(week).items() if event_dict.get("id")[0:5] in course_set]
-                event_conflict[current_week].append(temp)
+        for participant_list in participants.values():
+            for week_dict in participant_list:
+                week = "week " + str(week_dict.get('week'))
+                events = week_dict.get('events')
+                events_keys = [self.get_event_from_id(e) for e in events]
+                if events_keys not in event_conflict.get(week) and len(events_keys)>0:
+                    event_conflict[week].append(events_keys)
         return event_conflict
-
-
-
-    #Returns dict week number as key and a list of course conflicts for that week as value
-    def __get_course_conflict(self,participants):
-        course_conflict = {"week "+ str(i):[] for i in range(self.weeks_begin,self.weeks_end+1)}
-        for event_list in participants.values():
-            for event_dict in event_list:
-                week = event_dict.get("week")
-                if len(event_dict.get('events'))>0:
-                    temp = set([id[0:5] for id in event_dict.get('events')])
-                    if temp not in course_conflict.get("week "+str(week)):
-                        course_conflict.get("week "+str(week)).append(temp)
-        return course_conflict
 
     def get_event_from_id(self,id):
         for key,value in self.events.items():
@@ -185,7 +169,9 @@ if __name__ == '__main__':
     [t for sublist in instance.split_timeslots.get("week 8").values() for t in sublist]
     instance.rooms_at_t_count[240]
     instance.split_timeslots.get('week 10')
-    instance.get_events_this_week(8)
+    instance.teacher_conflict_graph == instance.get_conflict_graph(instance.teachers)
+
+
     # %%
     instance.student_events
     instance.rooms_at_t_count
