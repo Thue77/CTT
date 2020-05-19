@@ -17,6 +17,7 @@ class preprocess:
         self.rooms_at_t,self.rooms_at_t_count = self.get_rooms_at_t()
         self.banned_keys = self.get_banned_keys()
         self.events,self.courses = self.__get_events(events)
+        self.R_d_t = self.get_R_d_t() #number of available rooms in (t,t+d-1)
         self.student_events = self.student_events(students)
         self.teacher_conflict_graph = self.get_conflict_graph(teachers)
         self.student_conflict_graph = self.get_conflict_graph(students)
@@ -161,15 +162,47 @@ class preprocess:
                     events[week] |= set([frozenset([self.get_event_from_id(id) for id in dicts.get('events') if id[0:5] == course])])
         return {week :[[e for e in subset] for subset in set] for week,set in events.items()}
 
+    #Returns a list of list of time indexes where the lists are sorted by which slots are the least desirable, starting wiht the least desirable
+    def get_bad_slots(self):
+        #First index in the tuple is the time and the second is the day
+        dersirability_list = [[(9,4)],[(7,4),(8,4)],[(0,i) for i in range(0,5)],[(9,i) for i in range(0,4)],[(8,i) for i in range(0,4)]]
+        least_desirable_slots = []
+        for slots_list in dersirability_list:
+            least_desirable_slots.append([t for week,day_dict in self.split_timeslots.items() for day,slots in day_dict.items() for bad_slot in slots_list for t in slots if self.timeslots.get(t).get('hour')==bad_slot[0] and int(day[-1])==bad_slot[1]])
+        return least_desirable_slots
+
+
+    def get_durations(self):
+        duration_list = []
+        for e in self.events.values():
+            if e.get('duration') not in duration_list:
+                duration_list += [e.get('duration')]
+        return sorted(duration_list)
+
+    #Returns a dict mapping eact (d,t) to a number corresponding to the numberof available rooms in (t,t+d-1)
+    def get_R_d_t(self):
+        durations = self.get_durations()
+        R_d_t = {d:{} for d in durations}
+        for d in durations:
+            for day_dict in self.split_timeslots.values():
+                for day_list in day_dict.values():
+                    for t in day_list:
+                        R_d_t[d][t] = len([r for r in self.rooms if not any(self.timeslots.get(l) in self.rooms_busy.get(r) for l in range(t,t+d) if l in day_list)])
+        return R_d_t
+
+
+
+
 
 if __name__ == '__main__':
     instance_data = data.Data("C:\\Users\\thom1\\OneDrive\\SDU\\8. semester\\Linear and integer programming\\Part 2\\Material\\CTT\\data\\small")
     # instance_data = data.Data("C:\\Users\\thom1\\OneDrive\\SDU\\8. semester\\Linear and integer programming\\Part 2\\01Project\\data_baby_ex")
     instance = preprocess(instance_data.events,instance_data.slots,instance_data.banned,instance_data.rooms,instance_data.teachers,instance_data.students)
     # %%
-    instance.teacher_conflict_graph
-    instance.student_events
-    instance.rooms_at_t_count
-    week = "week "+str(8)
-    day = "day "+str(0)
-    instance.events
+    len([r for r in instance.rooms if all({'day':0,'week':6,'hour':i} not in instance.rooms_busy.get(r) for i in range(2))])
+    instance.get_durations()
+    instance.get_bad_slots()
+    sorted([2,1,3,43,5,3,5,21,1])
+    list_of_bad_slots = instance.get_bad_slots()
+    normalizing_const = sum([i for i in range(1,len(list_of_bad_slots)+1)])
+    cost = [i/normalizing_const for i in reversed(range(1,len(list_of_bad_slots)+1))]
